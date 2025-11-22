@@ -1,0 +1,22 @@
+# Website specific ignores
+.DS_Store
+Thumbs.db
+*.log
+
+# Development
+node_modules/
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# Build artifacts
+dist/
+build/
+
+# Environment
+.env
+.env.local
