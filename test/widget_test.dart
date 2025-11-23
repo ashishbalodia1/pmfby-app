@@ -8,7 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:krisibandhu/main.dart';
+import 'package:krashi_bandhu/main.dart';
 
 void main() {
   testWidgets('Renders Login Screen', (WidgetTester tester) async {
@@ -16,7 +16,7 @@ void main() {
     await tester.pumpWidget(const KrisiBandhuApp());
 
     // Verify that the login screen is rendered.
-    expect(find.text('KrisiBandhu'), findsOneWidget);
+    expect(find.text('Krashi Bandhu'), findsOneWidget);
     expect(find.text('Login as Farmer'), findsOneWidget);
     expect(find.text('Login as Official'), findsOneWidget);
   });
