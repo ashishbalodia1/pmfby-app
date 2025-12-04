@@ -114,7 +114,9 @@ class CloudImageService {
       );
 
       if (result != null) {
-        debugPrint('Image compressed: ${file.lengthSync()} -> ${result.lengthSync()} bytes');
+        final originalSize = await File(file.path).length();
+        final compressedSize = await File(result.path).length();
+        debugPrint('Image compressed: $originalSize -> $compressedSize bytes');
         return File(result.path);
       } else {
         debugPrint('Compression failed, using original file');
