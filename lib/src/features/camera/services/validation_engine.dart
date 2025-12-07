@@ -184,29 +184,34 @@ class ValidationEngine {
   }
 
   /// Check if capture is allowed based on current validation
+  /// Now always returns true - quality issues are warnings only
   bool canCapture() {
+    // Always allow capture - user can decide if quality is acceptable
+    // Quality warnings are shown but don't block capture
+    return true;
+  }
+
+  /// Check if current state has any quality warnings
+  bool hasQualityWarnings() {
     final state = _currentState;
     
-    // Check quality
     if (state.imageQuality != null) {
       if (state.imageQuality!.overallStatus == QualityStatus.error) {
-        return false;
+        return true;
       }
     }
     
-    // Check tilt
     if (state.tilt != null) {
       if (state.tilt!.status == TiltStatus.tilted) {
-        return false;
+        return true;
       }
     }
     
-    // Check stability
     if (!state.isStable) {
-      return false;
+      return true;
     }
     
-    return true;
+    return false;
   }
 
   /// Get list of issues preventing capture

@@ -35,9 +35,10 @@ class AROverlayPainter extends CustomPainter {
     if (showTiltIndicator) {
       _drawTiltIndicator(canvas, size);
     }
-    if (showCropMask && validationState?.segmentation != null) {
-      _drawCropMask(canvas, size);
-    }
+    // Crop mask disabled - was causing black screen issues
+    // if (showCropMask && validationState?.segmentation != null) {
+    //   _drawCropMask(canvas, size);
+    // }
   }
 
   void _drawBoundingBox(Canvas canvas, Size size) {
@@ -221,10 +222,16 @@ class AROverlayPainter extends CustomPainter {
 
   void _drawCropMask(Canvas canvas, Size size) {
     final segmentation = validationState?.segmentation;
+    // Only draw mask when crop is detected with good coverage
     if (segmentation == null || !segmentation.cropDetected) return;
+    if (segmentation.coverage < 0.1) return; // Skip if coverage too low
+    if (segmentation.status == SegmentationStatus.noCropDetected) return;
 
     final boundingBox = segmentation.cropBoundingBox;
     if (boundingBox == null) return;
+    
+    // Validate bounding box is reasonable
+    if (boundingBox.width <= 0 || boundingBox.height <= 0) return;
 
     // Scale bounding box to canvas size
     final scaleX = size.width / previewSize.width;
@@ -237,30 +244,41 @@ class AROverlayPainter extends CustomPainter {
       boundingBox.height * scaleY,
     );
 
-    // Draw semi-transparent overlay outside crop area
+    // Only draw light overlay if the scaled rect is reasonable (not covering whole screen)
+    final minSize = size.width * 0.1;
+    final maxSize = size.width * 0.9;
+    if (scaledRect.width < minSize || scaledRect.height < minSize) return;
+    if (scaledRect.width > maxSize && scaledRect.height > maxSize) return;
+    
+    // Draw very light semi-transparent overlay outside crop area
     final overlayPaint = Paint()
       ..color = ARColors.overlay;
 
-    // Top area
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, scaledRect.top),
-      overlayPaint,
-    );
-    // Bottom area
-    canvas.drawRect(
-      Rect.fromLTWH(0, scaledRect.bottom, size.width, size.height - scaledRect.bottom),
-      overlayPaint,
-    );
-    // Left area
-    canvas.drawRect(
-      Rect.fromLTWH(0, scaledRect.top, scaledRect.left, scaledRect.height),
-      overlayPaint,
-    );
-    // Right area
-    canvas.drawRect(
-      Rect.fromLTWH(scaledRect.right, scaledRect.top, size.width - scaledRect.right, scaledRect.height),
-      overlayPaint,
-    );
+    // Only draw if there's meaningful area to highlight
+    if (scaledRect.top > 10) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, scaledRect.top),
+        overlayPaint,
+      );
+    }
+    if (size.height - scaledRect.bottom > 10) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, scaledRect.bottom, size.width, size.height - scaledRect.bottom),
+        overlayPaint,
+      );
+    }
+    if (scaledRect.left > 10) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, scaledRect.top, scaledRect.left, scaledRect.height),
+        overlayPaint,
+      );
+    }
+    if (size.width - scaledRect.right > 10) {
+      canvas.drawRect(
+        Rect.fromLTWH(scaledRect.right, scaledRect.top, size.width - scaledRect.right, scaledRect.height),
+        overlayPaint,
+      );
+    }
 
     // Draw crop boundary
     Color borderColor;

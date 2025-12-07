@@ -174,6 +174,7 @@ class CropSegmentationService {
       confidence: coverage.clamp(0.0, 1.0),
       cropBoundingBox: boundingBox,
       coverage: coverage,
+      status: status,
     );
   }
 

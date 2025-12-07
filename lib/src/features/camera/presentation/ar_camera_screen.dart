@@ -251,14 +251,25 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   void _processFrame(CameraImage image) {
-    if (_isProcessingFrame) return;
+    // Skip if already processing or widget not mounted
+    if (_isProcessingFrame || !mounted) return;
     _isProcessingFrame = true;
 
-    // Process frame in validation engine
-    _validationEngine.processFrame(image).then((_) {
-      _isProcessingFrame = false;
-    }).catchError((e) {
-      _isProcessingFrame = false;
+    // Process frame in validation engine with timeout protection
+    Future.delayed(Duration.zero, () async {
+      try {
+        await _validationEngine.processFrame(image).timeout(
+          const Duration(milliseconds: 200),
+          onTimeout: () {
+            // Skip this frame if processing takes too long
+            debugPrint('Frame processing timeout - skipping frame');
+          },
+        );
+      } catch (e) {
+        debugPrint('Frame processing error: $e');
+      } finally {
+        _isProcessingFrame = false;
+      }
     });
   }
 
@@ -302,16 +313,228 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   void _onAllTasksComplete() {
+    _showCompletionDialog();
+  }
+
+  void _showCompletionDialog() {
     final summary = _taskManager.getSummary();
     
-    // Navigate to review screen with all captured images
-    if (mounted) {
-      context.push('/camera/review', extra: {
-        'images': summary.capturedImages,
-        'summary': summary.toJson(),
-        'purpose': widget.purpose,
-        'farmPlotId': widget.farmPlotId,
-      });
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: ARColors.valid.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle, color: ARColors.valid, size: 32),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('Photos Captured!', style: TextStyle(fontSize: 20)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'You have captured ${summary.completedTasks} photos successfully.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  _buildSummaryRow(Icons.photo_library, 'Photos taken', '${summary.completedTasks}'),
+                  if (summary.skippedTasks > 0)
+                    _buildSummaryRow(Icons.skip_next, 'Skipped', '${summary.skippedTasks}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'What would you like to do next?',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _addMorePhotos();
+            },
+            icon: const Icon(Icons.add_a_photo),
+            label: const Text('Take More'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _finishAndUpload(summary);
+            },
+            icon: const Icon(Icons.cloud_upload),
+            label: const Text('Upload & Finish'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ARColors.valid,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey.shade600),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(color: Colors.grey.shade600)),
+          const Spacer(),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  void _showCapturedPreview() {
+    final capturedImages = _taskManager.getCompletedImagePaths();
+    if (capturedImages.isEmpty) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black87,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Captured Photos (${capturedImages.length})',
+                  style: GoogleFonts.roboto(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 120,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: capturedImages.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    width: 100,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: ARColors.valid),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: Image.file(
+                        File(capturedImages[index]),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                    },
+                    icon: const Icon(Icons.add_a_photo),
+                    label: const Text('Take More'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white54),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showCompletionDialog();
+                    },
+                    icon: const Icon(Icons.check),
+                    label: const Text('Finish'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ARColors.valid,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addMorePhotos() {
+    // Reset tasks for more captures
+    _taskManager.reset();
+    _taskManager.startSession();
+    setState(() {});
+  }
+
+  void _finishAndUpload(CaptureSessionSummary summary) {
+    // Navigate to upload or home
+    if (summary.capturedImages.isNotEmpty) {
+      context.go('/dashboard');
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Text('${summary.completedTasks} photos saved for upload'),
+            ],
+          ),
+          backgroundColor: ARColors.valid,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      context.go('/dashboard');
     }
   }
 
@@ -580,7 +803,7 @@ class _ARCameraScreenState extends State<ARCameraScreen>
             ),
           ),
 
-        // AR Overlay
+        // AR Overlay - simplified to just show bounding box and tilt
         if (_showAROverlay)
           Positioned.fill(
             child: CustomPaint(
@@ -590,21 +813,21 @@ class _ARCameraScreenState extends State<ARCameraScreen>
                 previewSize: previewSize,
                 showBoundingBox: true,
                 showTiltIndicator: _showTiltIndicator,
-                showQualityIndicator: _showQualityIndicator,
-                showGpsIndicator: _showGpsIndicator,
-                showCropMask: true,
+                showQualityIndicator: false, // Disabled to reduce overlays
+                showGpsIndicator: false, // Disabled to reduce overlays
+                showCropMask: false, // Disabled - was causing black screen
                 pulseAnimation: _pulseAnimationController,
               ),
             ),
           ),
 
-        // Ghost Frame
-        if (_showGhostFrame && widget.multiAngleMode)
+        // Ghost Frame - simplified
+        if (_showGhostFrame && widget.multiAngleMode && _taskManager.currentTask != null)
           Positioned.fill(
             child: CustomPaint(
               painter: GhostFramePainter(
                 task: _taskManager.currentTask?.task,
-                opacity: 0.4,
+                opacity: 0.3,
               ),
             ),
           ),
@@ -837,61 +1060,166 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       left: 16,
       right: 16,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.black.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header with count and done button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${AppStrings.get('camera', 'task', lang)} ${_taskManager.currentIndex + 1}/${_taskManager.totalTasks}',
+                  'Take ${_taskManager.totalTasks - _taskManager.completedTaskCount} more photos',
                   style: GoogleFonts.roboto(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                Text(
-                  '${(_taskManager.progress * 100).toInt()}%',
-                  style: GoogleFonts.roboto(
-                    color: ARColors.valid,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                if (_taskManager.completedTaskCount >= 1)
+                  TextButton.icon(
+                    onPressed: _showCompletionDialog,
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Done'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: ARColors.valid,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
                   ),
-                ),
               ],
             ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: _taskManager.progress,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(ARColors.valid),
-                minHeight: 6,
+            const SizedBox(height: 12),
+            
+            // Task selector - horizontal scroll
+            SizedBox(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _taskManager.tasks.length,
+                itemBuilder: (context, index) {
+                  final taskItem = _taskManager.tasks[index];
+                  final isCompleted = taskItem.isComplete;
+                  final isActive = index == _taskManager.currentIndex;
+                  
+                  return GestureDetector(
+                    onTap: isCompleted ? null : () => _selectTask(index),
+                    child: Container(
+                      width: 85,
+                      margin: const EdgeInsets.only(right: 10),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isCompleted 
+                            ? ARColors.valid.withOpacity(0.3)
+                            : isActive 
+                                ? Colors.white.withOpacity(0.2)
+                                : Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isActive ? ARColors.valid : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                _getTaskIcon(taskItem.task.type),
+                                color: isCompleted ? ARColors.valid : Colors.white,
+                                size: 28,
+                              ),
+                              if (isCompleted)
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: ARColors.valid,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.check, color: Colors.white, size: 12),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            taskItem.task.title,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.roboto(
+                              color: isCompleted ? ARColors.valid : Colors.white,
+                              fontSize: 10,
+                              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            if (_taskManager.currentTask != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _taskManager.currentTask!.task.instruction,
-                style: GoogleFonts.roboto(
-                  color: Colors.white70,
-                  fontSize: 11,
+            
+            const SizedBox(height: 12),
+            
+            // Current task instruction
+            if (_taskManager.currentTask != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ARColors.valid.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: ARColors.valid.withOpacity(0.3)),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: ARColors.valid, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _taskManager.currentTask!.task.description,
+                        style: GoogleFonts.roboto(
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
           ],
         ),
       ),
     );
+  }
+
+  void _selectTask(int index) {
+    _taskManager.goToTask(index);
+    setState(() {});
+  }
+
+  IconData _getTaskIcon(CaptureTaskType type) {
+    switch (type) {
+      case CaptureTaskType.topView:
+        return Icons.arrow_downward;
+      case CaptureTaskType.sideView:
+        return Icons.swap_horiz;
+      case CaptureTaskType.closeUp:
+        return Icons.zoom_in;
+      case CaptureTaskType.wideAngle:
+        return Icons.panorama_wide_angle;
+      case CaptureTaskType.stageSpecific:
+        return Icons.spa;
+    }
   }
 
   Widget _buildStabilityIndicator() {
@@ -913,6 +1241,10 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   Widget _buildBlockerIndicator(String lang) {
+    // Show as warning instead of blocker
+    final hasWarnings = _validationEngine.hasQualityWarnings();
+    if (!hasWarnings) return const SizedBox.shrink();
+    
     return Positioned(
       bottom: 180,
       left: 16,
@@ -920,18 +1252,18 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: ARColors.error.withOpacity(0.9),
+          color: ARColors.warning.withOpacity(0.85),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 20),
+            const Icon(Icons.info_outline, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 _captureBlockers.isNotEmpty
-                    ? _captureBlockers.first
-                    : AppStrings.get('camera', 'cannot_capture', lang),
+                    ? '${_captureBlockers.first} (tap to capture anyway)'
+                    : 'For best results, hold steady',
                 style: GoogleFonts.roboto(
                   color: Colors.white,
                   fontSize: 13,
@@ -1020,15 +1352,29 @@ class _ARCameraScreenState extends State<ARCameraScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Skip button (multi-angle mode)
-                if (widget.multiAngleMode)
-                  IconButton(
-                    icon: const Icon(Icons.skip_next, size: 32),
-                    color: Colors.white54,
-                    onPressed: () {
-                      _taskManager.skipCurrentTask();
-                      HapticFeedback.lightImpact();
-                    },
+                // Gallery/Preview captured photos
+                if (widget.multiAngleMode && _taskManager.completedTaskCount > 0)
+                  GestureDetector(
+                    onTap: () => _showCapturedPreview(),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white, width: 2),
+                        color: Colors.black54,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${_taskManager.completedTaskCount}',
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   )
                 else
                   const SizedBox(width: 48),
@@ -1099,7 +1445,10 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   Widget _buildCaptureButton() {
-    final isReady = _captureEnabled && !_isCapturing;
+    // Always allow capture - quality issues are just warnings
+    final hasWarnings = _validationEngine.hasQualityWarnings();
+    final isReady = !_isCapturing;
+    final buttonColor = hasWarnings ? ARColors.warning : ARColors.valid;
 
     return GestureDetector(
       onTap: isReady ? _takePicture : null,
@@ -1116,7 +1465,7 @@ class _ARCameraScreenState extends State<ARCameraScreen>
           boxShadow: isReady
               ? [
                   BoxShadow(
-                    color: ARColors.valid.withOpacity(0.4),
+                    color: buttonColor.withOpacity(0.4),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -1128,7 +1477,7 @@ class _ARCameraScreenState extends State<ARCameraScreen>
           margin: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isReady ? ARColors.valid : Colors.white38,
+            color: isReady ? buttonColor : Colors.white38,
           ),
           child: _isCapturing
               ? const Center(
@@ -1141,7 +1490,13 @@ class _ARCameraScreenState extends State<ARCameraScreen>
                     ),
                   ),
                 )
-              : null,
+              : Center(
+                  child: Icon(
+                    Icons.camera_alt,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
         ),
       ),
     );

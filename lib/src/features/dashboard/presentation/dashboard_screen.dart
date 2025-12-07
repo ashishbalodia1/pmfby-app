@@ -174,6 +174,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: const Icon(Icons.support_agent, size: 28),
                   ),
                   const SizedBox(height: 12),
+                  // AR Camera FAB (NEW)
+                  FloatingActionButton(
+                    heroTag: 'ar_camera',
+                    onPressed: () => context.push('/ar-camera', extra: {
+                      'multiAngleMode': true,
+                      'purpose': 'crop_inspection',
+                    }),
+                    backgroundColor: Colors.purple.shade700,
+                    child: const Icon(Icons.view_in_ar, size: 28),
+                  ),
+                  const SizedBox(height: 12),
                   // Camera FAB
                   FloatingActionButton.extended(
                     heroTag: 'camera',

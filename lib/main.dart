@@ -14,6 +14,7 @@ import 'src/features/dashboard/presentation/dashboard_screen.dart';
 import 'src/features/officer/officer_dashboard_screen.dart';
 import 'src/features/camera/presentation/camera_screen.dart';
 import 'src/features/camera/presentation/enhanced_camera_screen.dart';
+import 'src/features/camera/presentation/ar_camera_screen.dart';
 import 'src/features/camera/presentation/image_preview_screen.dart';
 import 'src/features/profile/presentation/profile_screen.dart';
 import 'src/features/complaints/presentation/screens/complaints_screen.dart';
@@ -192,6 +193,19 @@ GoRouter _buildRouter(BuildContext context) {
             },
           ),
         ],
+      ),
+
+      // AR CAMERA (Advanced AR features)
+      GoRoute(
+        path: '/ar-camera',
+        builder: (_, state) {
+          final extras = state.extra as Map<String, dynamic>?;
+          return ARCameraScreen(
+            purpose: extras?['purpose'] as String?,
+            multiAngleMode: extras?['multiAngleMode'] as bool? ?? false,
+            farmPlotId: extras?['farmPlotId'] as String?,
+          );
+        },
       ),
 
       // CROP MONITORING (NEW)
