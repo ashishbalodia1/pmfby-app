@@ -9,17 +9,17 @@ class MongoDBConfig {
     const dbUser = String.fromEnvironment('MONGO_USER', defaultValue: '');
     const dbPassword = String.fromEnvironment('MONGO_PASSWORD', defaultValue: '');
     const dbCluster = String.fromEnvironment('MONGO_CLUSTER', defaultValue: '');
-    const dbName = String.fromEnvironment('MONGO_DB', defaultValue: 'pmfby_app');
+    const dbName = String.fromEnvironment('MONGO_DB', defaultValue: 'pmfby-app');
     
     if (dbUser.isEmpty || dbPassword.isEmpty || dbCluster.isEmpty) {
       debugPrint('MongoDB credentials not set. Using placeholder connection string.');
       return 'mongodb://localhost:27017/$dbName'; // Fallback for development
     }
     
-    return 'mongodb+srv://$dbUser:$dbPassword@$dbCluster.mongodb.net/$dbName?retryWrites=true&w=majority';
+    return 'mongodb+srv://$dbUser:$dbPassword@$dbCluster/$dbName?retryWrites=true&w=majority';
   }
   
-  static const String databaseName = 'pmfby_app';
+  static const String databaseName = 'pmfby-app';
   
   // Collection names
   static const String farmersCollection = 'farmers';

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -613,9 +614,4 @@ class CropHealthAssessment {
     if (overallScore >= 40) return const Color(0xFFF57C00);
     return const Color(0xFFC62828);
   }
-}
-
-/// Extension for color
-extension ColorExtension on Color {
-  // This is imported from dart:ui or material
 }

@@ -43,6 +43,7 @@ import 'src/services/firebase_auth_service.dart';
 import 'src/services/image_upload_service.dart';
 import 'src/services/connectivity_service.dart';
 import 'src/services/auto_sync_service.dart';
+import 'src/services/mongodb_service.dart';
 import 'src/providers/language_provider.dart';
 import 'src/features/splash/splash_screen.dart';
 
@@ -69,6 +70,14 @@ Future<void> initializeApp() async {
     debugPrint('✅ Firebase initialized successfully');
   } catch (e) {
     debugPrint('⚠️ Firebase initialization error: $e');
+  }
+
+  // MongoDB initialization
+  try {
+    await MongoDBService.instance.connect();
+    debugPrint('✅ MongoDB initialized successfully');
+  } catch (e) {
+    debugPrint('⚠️ MongoDB initialization failed: $e');
   }
 
   // Local Auth initialization (with demo user logic)

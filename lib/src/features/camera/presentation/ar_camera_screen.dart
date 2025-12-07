@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/language_provider.dart';
 import '../../../localization/app_localizations.dart';
+import '../../../services/local_storage_service.dart';
 import '../models/ar_camera_models.dart';
 import '../painters/ar_overlay_painters.dart';
 import '../services/validation_engine.dart';
@@ -217,26 +218,37 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
   Future<void> _setupCamera(int cameraIndex) async {
     if (_controller != null) {
+      try {
+        await _controller!.stopImageStream();
+      } catch (e) {
+        debugPrint('Error stopping image stream: $e');
+      }
       await _controller!.dispose();
     }
 
-    _controller = CameraController(
-      _cameras![cameraIndex],
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
-    );
+    try {
+      _controller = CameraController(
+        _cameras![cameraIndex],
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
 
-    _initializeControllerFuture = _controller!.initialize();
-    await _initializeControllerFuture;
+      _initializeControllerFuture = _controller!.initialize();
+      await _initializeControllerFuture;
 
-    if (mounted) {
+      if (!mounted) return;
+
       _minZoom = await _controller!.getMinZoomLevel();
       _maxZoom = await _controller!.getMaxZoomLevel();
       _currentZoom = _minZoom;
 
       // Start image stream for real-time analysis
-      await _controller!.startImageStream(_processFrame);
+      try {
+        await _controller!.startImageStream(_processFrame);
+      } catch (e) {
+        debugPrint('Error starting image stream: $e');
+      }
 
       // Start validation engine
       await _validationEngine.start();
@@ -245,6 +257,13 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       _taskManager.startSession();
 
       setState(() {
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (e) {
+      debugPrint('Camera setup error: $e');
+      setState(() {
+        _error = 'Failed to initialize camera: $e';
         _isLoading = false;
       });
     }
@@ -515,9 +534,40 @@ class _ARCameraScreenState extends State<ARCameraScreen>
     setState(() {});
   }
 
-  void _finishAndUpload(CaptureSessionSummary summary) {
-    // Navigate to upload or home
+  void _finishAndUpload(CaptureSessionSummary summary) async {
+    // Save all captured images to local storage for syncing
     if (summary.capturedImages.isNotEmpty) {
+      try {
+        final localStorage = LocalStorageService();
+        
+        // Save each captured image to pending uploads
+        for (final imagePath in summary.capturedImages) {
+          final taskItem = _taskManager.tasks.firstWhere(
+            (t) => t.capturedImagePath == imagePath,
+            orElse: () => _taskManager.tasks.first,
+          );
+          
+          final metadata = taskItem.metadata ?? {};
+          
+          await localStorage.savePendingUpload(
+            PendingUpload(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              imagePath: imagePath,
+              cropType: widget.purpose ?? 'general',
+              description: taskItem.task.instruction,
+              latitude: metadata['latitude'] as double?,
+              longitude: metadata['longitude'] as double?,
+              capturedAt: taskItem.capturedAt ?? DateTime.now(),
+              status: SyncStatus.pending,
+            ),
+          );
+        }
+        
+        debugPrint('Saved ${summary.capturedImages.length} images to local storage');
+      } catch (e) {
+        debugPrint('Error saving to local storage: $e');
+      }
+      
       context.go('/dashboard');
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -526,11 +576,22 @@ class _ARCameraScreenState extends State<ARCameraScreen>
             children: [
               const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: 12),
-              Text('${summary.completedTasks} photos saved for upload'),
+              Expanded(
+                child: Text(
+                  '${summary.completedTasks} photos saved locally. They will sync when online.',
+                ),
+              ),
             ],
           ),
           backgroundColor: ARColors.valid,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'View',
+            textColor: Colors.white,
+            onPressed: () {
+              // Could navigate to upload queue screen
+            },
+          ),
         ),
       );
     } else {
@@ -545,7 +606,11 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
     try {
       // Stop image stream temporarily
-      await _controller?.stopImageStream();
+      try {
+        await _controller?.stopImageStream();
+      } catch (e) {
+        debugPrint('Error stopping stream: $e');
+      }
 
       // Capture animation
       _captureAnimationController.forward(from: 0.0).then((_) {
@@ -554,15 +619,31 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
       await _initializeControllerFuture;
 
-      final directory = await getTemporaryDirectory();
+      // Save to app documents directory (permanent storage)
+      final directory = await getApplicationDocumentsDirectory();
+      final capturesDir = Directory(path.join(directory.path, 'captures'));
+      if (!await capturesDir.exists()) {
+        await capturesDir.create(recursive: true);
+      }
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final taskId = _taskManager.currentTask?.task.id ?? 'unknown';
       final imagePath = path.join(
-        directory.path,
-        'capture_${timestamp}.jpg',
+        capturesDir.path,
+        'capture_${taskId}_${timestamp}.jpg',
       );
 
       final XFile image = await _controller!.takePicture();
       await File(image.path).copy(imagePath);
+      
+      // Delete temporary file
+      try {
+        await File(image.path).delete();
+      } catch (e) {
+        debugPrint('Error deleting temp file: $e');
+      }
+
+      debugPrint('Image saved to: $imagePath');
 
       // Complete current task
       _taskManager.completeCurrentTask(
@@ -580,22 +661,40 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
       // Restart image stream if more tasks remain
       if (!_taskManager.allTasksCompleted) {
-        await _controller?.startImageStream(_processFrame);
+        try {
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted && _controller != null && _controller!.value.isInitialized) {
+            await _controller!.startImageStream(_processFrame);
+          }
+        } catch (e) {
+          debugPrint('Error restarting stream: $e');
+        }
       }
 
       HapticFeedback.mediumImpact();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Capture failed: $e'),
-          backgroundColor: ARColors.error,
-        ),
-      );
+      debugPrint('Capture error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Capture failed: $e'),
+            backgroundColor: ARColors.error,
+          ),
+        );
+      }
 
       // Restart image stream on error
-      await _controller?.startImageStream(_processFrame);
+      try {
+        if (mounted && _controller != null && _controller!.value.isInitialized) {
+          await _controller!.startImageStream(_processFrame);
+        }
+      } catch (e) {
+        debugPrint('Error restarting stream after error: $e');
+      }
     } finally {
-      setState(() => _isCapturing = false);
+      if (mounted) {
+        setState(() => _isCapturing = false);
+      }
     }
   }
 
@@ -659,6 +758,18 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    
+    // Stop image stream first
+    if (_controller != null && _controller!.value.isInitialized) {
+      try {
+        _controller!.stopImageStream().catchError((e) {
+          debugPrint('Error stopping stream in dispose: $e');
+        });
+      } catch (e) {
+        debugPrint('Error in dispose stream: $e');
+      }
+    }
+    
     _controller?.dispose();
     _validationEngine.dispose();
     _taskManager.dispose();
@@ -673,16 +784,39 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
+    final controller = _controller;
+    
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      // Pause camera operations
       _validationEngine.stop();
-      _controller?.stopImageStream();
-      _controller?.dispose();
+      if (controller != null && controller.value.isInitialized) {
+        try {
+          controller.stopImageStream().catchError((e) {
+            debugPrint('Error stopping stream on pause: $e');
+          });
+        } catch (e) {
+          debugPrint('Error in pause: $e');
+        }
+      }
     } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
+      // Resume camera operations
+      if (controller != null && controller.value.isInitialized) {
+        try {
+          controller.startImageStream(_processFrame).then((_) {
+            _validationEngine.start();
+          }).catchError((e) {
+            debugPrint('Error restarting stream on resume: $e');
+            // Try reinitializing if stream restart fails
+            _initializeCamera();
+          });
+        } catch (e) {
+          debugPrint('Error in resume: $e');
+          _initializeCamera();
+        }
+      } else {
+        // Camera not initialized, reinitialize
+        _initializeCamera();
+      }
     }
   }
 
