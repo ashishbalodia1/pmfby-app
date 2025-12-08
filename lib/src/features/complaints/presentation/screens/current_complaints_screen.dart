@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../domain/models/complaint_model.dart';
+import '../../../../providers/language_provider.dart';
+import '../../../../localization/app_localizations.dart';
 
 class CurrentComplaintsScreen extends StatefulWidget {
   const CurrentComplaintsScreen({super.key});
@@ -78,55 +81,60 @@ class _CurrentComplaintsScreenState extends State<CurrentComplaintsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Filter chips
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('All', 'all'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Under Review', 'pending'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('Approved', 'approved'),
-                ],
-              ),
-            ),
-          ),
-          // Complaints list
-          Expanded(
-            child: _filteredComplaints.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.inbox_outlined,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No complaints found',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    itemCount: _filteredComplaints.length,
-                    itemBuilder: (context, index) {
-                      return _buildComplaintCard(_filteredComplaints[index]);
-                    },
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          body: Column(
+            children: [
+              // Filter chips
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip(AppStrings.get('complaints', 'all', lang), 'all'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(AppStrings.get('complaints', 'under_review', lang), 'pending'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(AppStrings.get('complaints', 'approved', lang), 'approved'),
+                    ],
                   ),
+                ),
+              ),
+              // Complaints list
+              Expanded(
+                child: _filteredComplaints.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.inbox_outlined,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              AppStrings.get('complaints', 'no_complaints_found', lang),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        itemCount: _filteredComplaints.length,
+                        itemBuilder: (context, index) {
+                          return _buildComplaintCard(_filteredComplaints[index], lang);
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -150,7 +158,7 @@ class _CurrentComplaintsScreenState extends State<CurrentComplaintsScreen> {
     );
   }
 
-  Widget _buildComplaintCard(Complaint complaint) {
+  Widget _buildComplaintCard(Complaint complaint, String lang) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: InkWell(
@@ -212,9 +220,9 @@ class _CurrentComplaintsScreenState extends State<CurrentComplaintsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildDetailItem('Damage', '${complaint.damagePercentage}%'),
-                  _buildDetailItem('Claim', complaint.claimAmount),
-                  _buildDetailItem('Days', '${complaint.daysOld}d'),
+                  _buildDetailItem(AppStrings.get('complaints', 'damage', lang), '${complaint.damagePercentage}%'),
+                  _buildDetailItem(AppStrings.get('complaints', 'claim', lang), complaint.claimAmount),
+                  _buildDetailItem(AppStrings.get('complaints', 'days', lang), '${complaint.daysOld}d'),
                 ],
               ),
               const SizedBox(height: 12.0),
@@ -225,7 +233,7 @@ class _CurrentComplaintsScreenState extends State<CurrentComplaintsScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${complaint.village}, ${complaint.district} • ${complaint.acreage} acres',
+                      '${complaint.village}, ${complaint.district} • ${complaint.acreage} ${AppStrings.get('complaints', 'acres', lang)}',
                       style: Theme.of(context).textTheme.bodySmall,
                       overflow: TextOverflow.ellipsis,
                     ),

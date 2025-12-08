@@ -62,4 +62,11 @@ class AuthProvider with ChangeNotifier {
     }
     return success;
   }
+
+  // Set a demo user directly (for OTP-based demo login)
+  void setDemoUser(User user) {
+    _currentUser = user;
+    _isLoggedIn = true;
+    notifyListeners();
+  }
 }

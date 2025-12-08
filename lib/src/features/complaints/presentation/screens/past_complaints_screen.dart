@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../domain/models/complaint_model.dart';
+import '../../../../providers/language_provider.dart';
+import '../../../../localization/app_localizations.dart';
 
 class PastComplaintsScreen extends StatefulWidget {
   const PastComplaintsScreen({super.key});
@@ -130,91 +133,96 @@ class _PastComplaintsScreenState extends State<PastComplaintsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Filters and sort
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Status filters
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip('All', 'all'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('Resolved', 'resolved'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('Rejected', 'rejected'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Sort option
-                Row(
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          body: Column(
+            children: [
+              // Filters and sort
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.sort, size: 18, color: Colors.grey[600]),
-                    const SizedBox(width: 8),
-                    DropdownButton<String>(
-                      value: _sortBy,
-                      underline: SizedBox.shrink(),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'recent',
-                          child: Text('Most Recent'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'oldest',
-                          child: Text('Oldest First'),
+                    // Status filters
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip(AppStrings.get('complaints', 'all', lang), 'all'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(AppStrings.get('complaints', 'resolved', lang), 'resolved'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip(AppStrings.get('complaints', 'rejected', lang), 'rejected'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Sort option
+                    Row(
+                      children: [
+                        Icon(Icons.sort, size: 18, color: Colors.grey[600]),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: _sortBy,
+                          underline: SizedBox.shrink(),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'recent',
+                              child: Text('Most Recent'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'oldest',
+                              child: Text('Oldest First'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _sortBy = value;
+                                _sortComplaints();
+                              });
+                            }
+                          },
                         ),
                       ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            _sortBy = value;
-                            _sortComplaints();
-                          });
-                        }
-                      },
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          // Complaints list
-          Expanded(
-            child: _filteredComplaints.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.history,
-                          size: 64,
-                          color: Colors.grey[400],
+              ),
+              // Complaints list
+              Expanded(
+                child: _filteredComplaints.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.history,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              AppStrings.get('complaints', 'no_past_complaints', lang),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No past complaints',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    itemCount: _filteredComplaints.length,
-                    itemBuilder: (context, index) {
-                      return _buildComplaintCard(_filteredComplaints[index]);
-                    },
-                  ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        itemCount: _filteredComplaints.length,
+                        itemBuilder: (context, index) {
+                          return _buildComplaintCard(_filteredComplaints[index], lang);
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -238,7 +246,7 @@ class _PastComplaintsScreenState extends State<PastComplaintsScreen> {
     );
   }
 
-  Widget _buildComplaintCard(Complaint complaint) {
+  Widget _buildComplaintCard(Complaint complaint, String lang) {
     final isResolved = complaint.status == 'resolved';
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -301,8 +309,8 @@ class _PastComplaintsScreenState extends State<PastComplaintsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildDetailItem('Damage', '${complaint.damagePercentage}%'),
-                  _buildDetailItem('Claim', complaint.claimAmount),
+                  _buildDetailItem(AppStrings.get('complaints', 'damage', lang), '${complaint.damagePercentage}%'),
+                  _buildDetailItem(AppStrings.get('complaints', 'claim', lang), complaint.claimAmount),
                   _buildDetailItem(
                     'Settled',
                     _formatDate(complaint.resolvedDate ??

@@ -2,6 +2,8 @@
 /// These are hardcoded test accounts that bypass authentication
 library;
 
+import '../features/auth/domain/models/user_model.dart';
+
 class DemoUsers {
   // Farmer Test Accounts
   static const List<Map<String, String>> farmers = [
@@ -139,5 +141,26 @@ class DemoUsers {
   // Check if OTP is valid (for demo, always accept 123456)
   static bool isValidOTP(String otp) {
     return otp == demoOTP;
+  }
+
+  // Convert demo user Map to User model
+  static User? getUserFromDemoData(Map<String, String>? demoData) {
+    if (demoData == null) return null;
+    
+    return User(
+      userId: 'demo_${demoData['phone']}',
+      name: demoData['name'] ?? 'Demo User',
+      email: demoData['email'] ?? '',
+      phone: demoData['phone'] ?? '',
+      role: demoData['role'] ?? 'farmer',
+      password: demoData['password'],
+      village: demoData['village'],
+      district: demoData['district'],
+      state: demoData['state'],
+      officialId: demoData['role'] == 'official' ? 'OFF-${demoData['phone']}' : null,
+      designation: demoData['designation'],
+      department: demoData['role'] == 'official' ? 'Agriculture Insurance' : null,
+      assignedDistrict: demoData['district'],
+    );
   }
 }

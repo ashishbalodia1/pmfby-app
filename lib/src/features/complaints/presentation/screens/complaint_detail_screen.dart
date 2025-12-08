@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../domain/models/complaint_model.dart';
+import '../../../../providers/language_provider.dart';
+import '../../../../localization/app_localizations.dart';
 
 class ComplaintDetailScreen extends StatelessWidget {
   final Complaint complaint;
@@ -12,87 +15,92 @@ class ComplaintDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Complaint Details'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status card
-            _buildStatusCard(context),
-            const SizedBox(height: 24.0),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(AppStrings.get('complaints', 'complaint_details', lang)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.pop(),
+            ),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Status card
+                _buildStatusCard(context),
+                const SizedBox(height: 24.0),
 
-            // Complaint ID and dates
-            _buildSection(
-              context,
-              'Complaint Information',
-              [
-                _buildInfoRow('Complaint ID', complaint.complaintId),
-                _buildInfoRow(
-                  'Submitted',
-                  _formatDate(complaint.submissionDate),
+                // Complaint ID and dates
+                _buildSection(
+                  context,
+                  'Complaint Information',
+                  [
+                    _buildInfoRow('Complaint ID', complaint.complaintId),
+                    _buildInfoRow(
+                      'Submitted',
+                      _formatDate(complaint.submissionDate),
+                    ),
+                    if (complaint.resolvedDate != null)
+                      _buildInfoRow(
+                        'Resolved',
+                        _formatDate(complaint.resolvedDate!),
+                      ),
+                    _buildInfoRow('${AppStrings.get('complaints', 'days', lang)} Pending', '${complaint.daysOld} ${AppStrings.get('complaints', 'days', lang)}'),
+                  ],
                 ),
-                if (complaint.resolvedDate != null)
-                  _buildInfoRow(
-                    'Resolved',
-                    _formatDate(complaint.resolvedDate!),
-                  ),
-                _buildInfoRow('Days Pending', '${complaint.daysOld} days'),
-              ],
-            ),
-            const SizedBox(height: 24.0),
+                const SizedBox(height: 24.0),
 
-            // Crop and damage details
-            _buildSection(
-              context,
-              'Crop Details',
-              [
-                _buildInfoRow('Crop Type', complaint.cropType),
-                _buildInfoRow('Damage', '${complaint.damagePercentage}%'),
-                _buildInfoRow('Acreage', '${complaint.acreage} acres'),
-                _buildInfoRow('Location',
-                    '${complaint.village}, ${complaint.district}'),
-              ],
-            ),
-            const SizedBox(height: 24.0),
-
-            // Financial details
-            _buildSection(
-              context,
-              'Financial Information',
-              [
-                _buildInfoRow('Insured Amount', complaint.insuredAmount),
-                _buildInfoRow('Claim Amount', complaint.claimAmount),
-                _buildInfoRow(
-                  'Settlement Rate',
-                  '${((double.parse(complaint.claimAmount.replaceAll('₹', '').replaceAll(',', '')) / double.parse(complaint.insuredAmount.replaceAll('₹', '').replaceAll(',', ''))) * 100).toStringAsFixed(1)}%',
+                // Crop and damage details
+                _buildSection(
+                  context,
+                  'Crop Details',
+                  [
+                    _buildInfoRow('Crop Type', complaint.cropType),
+                    _buildInfoRow(AppStrings.get('complaints', 'damage', lang), '${complaint.damagePercentage}%'),
+                    _buildInfoRow('Acreage', '${complaint.acreage} ${AppStrings.get('complaints', 'acres', lang)}'),
+                    _buildInfoRow('Location',
+                        '${complaint.village}, ${complaint.district}'),
+                  ],
                 ),
+                const SizedBox(height: 24.0),
+
+                // Financial details
+                _buildSection(
+                  context,
+                  'Financial Information',
+                  [
+                    _buildInfoRow('Insured Amount', complaint.insuredAmount),
+                    _buildInfoRow(AppStrings.get('complaints', 'claim', lang), complaint.claimAmount),
+                    _buildInfoRow(
+                      'Settlement Rate',
+                      '${((double.parse(complaint.claimAmount.replaceAll('₹', '').replaceAll(',', '')) / double.parse(complaint.insuredAmount.replaceAll('₹', '').replaceAll(',', ''))) * 100).toStringAsFixed(1)}%',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24.0),
+
+                // Description
+                _buildDescriptionSection(context, lang),
+                const SizedBox(height: 24.0),
+
+                // Officer comments
+                if (complaint.officerComments.isNotEmpty)
+                  _buildCommentsSection(context),
+
+                const SizedBox(height: 24.0),
+
+                // Action buttons
+                _buildActionButtons(context, lang),
               ],
             ),
-            const SizedBox(height: 24.0),
-
-            // Description
-            _buildDescriptionSection(context),
-            const SizedBox(height: 24.0),
-
-            // Officer comments
-            if (complaint.officerComments.isNotEmpty)
-              _buildCommentsSection(context),
-
-            const SizedBox(height: 24.0),
-
-            // Action buttons
-            _buildActionButtons(context),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -183,12 +191,12 @@ class ComplaintDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDescriptionSection(BuildContext context) {
+  Widget _buildDescriptionSection(BuildContext context, String lang) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Description',
+          AppStrings.get('complaints', 'description', lang),
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -250,7 +258,7 @@ class ComplaintDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, String lang) {
     return Row(
       children: [
         Expanded(
@@ -273,9 +281,9 @@ class ComplaintDetailScreen extends StatelessWidget {
             onPressed: complaint.isActive
                 ? () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Appeal feature coming soon!'),
-                        duration: Duration(seconds: 2),
+                      SnackBar(
+                        content: Text('Appeal ${AppStrings.get('complaints', 'feature_coming_soon', lang)}'),
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   }

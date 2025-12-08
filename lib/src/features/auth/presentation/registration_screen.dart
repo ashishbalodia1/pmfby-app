@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:developer' as developer;
 import '../domain/models/user_model.dart';
 import 'providers/auth_provider.dart';
 import '../../../services/email_otp_service.dart';
+import '../../../services/mongodb_service.dart';
+import '../../../services/aadhar_service.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -22,6 +26,31 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _emailVerified = false;
   bool _otpSent = false;
   final _otpController = TextEditingController();
+  
+  // Phone verification
+  bool _phoneVerified = false;
+  bool _phoneOtpSent = false;
+  final _phoneOtpController = TextEditingController();
+  
+  // Aadhar verification
+  bool _aadharVerified = false;
+  bool _aadharOtpSent = false;
+  final _aadharMobileController = TextEditingController();
+  final _aadharOtpController = TextEditingController();
+  
+  // Additional validation flags
+  bool _passwordStrong = false;
+  bool _nameValid = false;
+  bool _emailValid = false;
+  bool _phoneValid = false;
+  bool _passwordMatch = false;
+  
+  // Validation error messages
+  String? _nameError;
+  String? _emailError;
+  String? _phoneError;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   // Common fields
   final _nameController = TextEditingController();
@@ -70,11 +99,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _otpController.dispose();
+    _phoneOtpController.dispose();
     _villageController.dispose();
     _districtController.dispose();
     _stateController.dispose();
     _farmSizeController.dispose();
     _aadharController.dispose();
+    _aadharMobileController.dispose();
+    _aadharOtpController.dispose();
     _officialIdController.dispose();
     _designationController.dispose();
     _departmentController.dispose();
@@ -84,13 +116,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   void _nextPage() {
     if (_currentPage == 0) {
-      if (_validateCommonFields() && _emailVerified) {
+      if (_validateCommonFields() && _emailVerified && _phoneVerified) {
         _pageController.nextPage(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
       } else if (!_emailVerified) {
         _showError('Please verify your email first');
+      } else if (!_phoneVerified) {
+        _showError('Please verify your phone number first');
       }
     }
   }
@@ -109,6 +143,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    developer.log('📧 Attempting to send OTP to: ${_emailController.text.trim()}');
+    
     setState(() {
       _isLoading = true;
     });
@@ -119,10 +155,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         purpose: 'register',
       );
 
+      developer.log('📧 OTP send result: $success');
+      
       if (success) {
         setState(() {
           _otpSent = true;
         });
+        developer.log('✅ OTP sent successfully to ${_emailController.text.trim()}');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -132,8 +172,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ),
           );
         }
+      } else {
+        developer.log('❌ Failed to send OTP');
+        _showError('Failed to send OTP. Please try again.');
       }
     } catch (e) {
+      developer.log('❌ Error sending OTP: $e');
       _showError(e.toString());
     } finally {
       if (mounted) {
@@ -150,6 +194,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    developer.log('🔐 Attempting to verify OTP for: ${_emailController.text.trim()}');
+    developer.log('🔐 Entered OTP: ${_otpController.text.trim()}');
+    
     setState(() {
       _isLoading = true;
     });
@@ -160,10 +207,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         _otpController.text.trim(),
       );
 
+      developer.log('🔐 OTP verification result: $isValid');
+      
       if (isValid) {
         setState(() {
           _emailVerified = true;
         });
+        developer.log('✅ Email verified successfully: ${_emailController.text.trim()}');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -173,8 +224,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           );
         }
       } else {
+        developer.log('❌ OTP verification failed - invalid or expired');
         _showError('Invalid or expired OTP. Please try again.');
       }
+    } catch (e) {
+      developer.log('❌ Error verifying OTP: $e');
+      _showError('Verification error: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -183,32 +238,307 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       }
     }
   }
+  
+  Future<void> _sendPhoneOTP() async {
+    if (_phoneController.text.isEmpty || _phoneController.text.length != 10) {
+      _showError('Please enter a valid 10-digit phone number');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Simulate phone OTP sending (in production, integrate with SMS service)
+      await Future.delayed(const Duration(seconds: 1));
+      
+      setState(() {
+        _phoneOtpSent = true;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📱 OTP sent to ${_phoneController.text}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Failed to send OTP: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _verifyPhoneOTP() async {
+    if (_phoneOtpController.text.isEmpty || _phoneOtpController.text.length != 6) {
+      _showError('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Simulate verification (in production, verify with backend)
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // For demo, accept any 6-digit code
+      setState(() {
+        _phoneVerified = true;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Phone verified successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Verification failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  bool _validateAadhar(String aadhar) {
+    return AadharService.instance.validateAadharNumber(aadhar);
+  }
+  
+  Future<void> _sendAadharMobileOTP() async {
+    if (_aadharController.text.isEmpty) {
+      _showError('Please enter Aadhar number first');
+      return;
+    }
+    
+    if (!_validateAadhar(_aadharController.text)) {
+      _showError('Invalid Aadhar number. Please check and try again.');
+      return;
+    }
+    
+    if (_aadharMobileController.text.isEmpty) {
+      _showError('Please enter Aadhar-linked mobile number');
+      return;
+    }
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final success = await AadharService.instance.sendAadharMobileOTP(
+        _aadharController.text,
+        _aadharMobileController.text,
+      );
+
+      if (success && mounted) {
+        setState(() {
+          _aadharOtpSent = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP sent to ${_aadharMobileController.text}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError('Failed to send OTP. Please try again.');
+      }
+    } catch (e) {
+      _showError('Failed to send OTP: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _verifyAadharMobileOTP() async {
+    if (_aadharOtpController.text.isEmpty) {
+      _showError('Please enter the OTP');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final isValid = await AadharService.instance.verifyAadharMobileOTP(
+        _aadharMobileController.text,
+        _aadharOtpController.text,
+      );
+
+      if (isValid && mounted) {
+        setState(() {
+          _aadharVerified = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Aadhar verified successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError('Invalid OTP. Please try again.');
+      }
+    } catch (e) {
+      _showError('Verification failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  void _checkPasswordStrength(String password) {
+    setState(() {
+      _passwordStrong = password.length >= 8 &&
+          password.contains(RegExp(r'[A-Z]')) &&
+          password.contains(RegExp(r'[a-z]')) &&
+          password.contains(RegExp(r'[0-9]'));
+    });
+  }
+  
+  void _validateName(String name) {
+    setState(() {
+      if (name.isEmpty) {
+        _nameValid = false;
+        _nameError = 'Name is required';
+      } else if (name.length < 3) {
+        _nameValid = false;
+        _nameError = 'Name must be at least 3 characters';
+      } else if (name.length > 50) {
+        _nameValid = false;
+        _nameError = 'Name is too long (max 50 characters)';
+      } else if (!RegExp(r'^[a-zA-Z\s\.]+$').hasMatch(name)) {
+        _nameValid = false;
+        _nameError = 'Name can only contain letters and spaces';
+      } else if (RegExp(r'\s{2,}').hasMatch(name)) {
+        _nameValid = false;
+        _nameError = 'Name cannot have consecutive spaces';
+      } else {
+        _nameValid = true;
+        _nameError = null;
+      }
+    });
+  }
+  
+  void _validateEmail(String email) {
+    setState(() {
+      if (email.isEmpty) {
+        _emailValid = false;
+        _emailError = 'Email is required';
+      } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+        _emailValid = false;
+        _emailError = 'Enter a valid email address';
+      } else {
+        _emailValid = true;
+        _emailError = null;
+      }
+    });
+  }
+  
+  void _validatePhone(String phone) {
+    setState(() {
+      if (phone.isEmpty) {
+        _phoneValid = false;
+        _phoneError = 'Phone number is required';
+      } else if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(phone)) {
+        _phoneValid = false;
+        _phoneError = 'Enter a valid 10-digit Indian mobile number';
+      } else {
+        _phoneValid = true;
+        _phoneError = null;
+      }
+    });
+  }
+  
+  void _validatePassword(String password) {
+    setState(() {
+      if (password.isEmpty) {
+        _passwordError = 'Password is required';
+      } else if (password.length < 8) {
+        _passwordError = 'Password must be at least 8 characters';
+      } else if (!password.contains(RegExp(r'[A-Z]'))) {
+        _passwordError = 'Password must contain an uppercase letter';
+      } else if (!password.contains(RegExp(r'[a-z]'))) {
+        _passwordError = 'Password must contain a lowercase letter';
+      } else if (!password.contains(RegExp(r'[0-9]'))) {
+        _passwordError = 'Password must contain a number';
+      } else {
+        _passwordError = null;
+      }
+      
+      // Check password match
+      _validatePasswordMatch();
+    });
+  }
+  
+  void _validatePasswordMatch() {
+    setState(() {
+      if (_confirmPasswordController.text.isEmpty) {
+        _passwordMatch = false;
+        _confirmPasswordError = null;
+      } else if (_passwordController.text != _confirmPasswordController.text) {
+        _passwordMatch = false;
+        _confirmPasswordError = 'Passwords do not match';
+      } else {
+        _passwordMatch = true;
+        _confirmPasswordError = null;
+      }
+    });
+  }
 
   bool _validateCommonFields() {
-    if (_nameController.text.isEmpty) {
-      _showError('Please enter your name');
+    // Validate name
+    if (!_nameValid || _nameController.text.isEmpty) {
+      _showError(_nameError ?? 'Please enter a valid name');
       return false;
     }
-    if (_emailController.text.isEmpty ||
-        !_emailController.text.contains('@')) {
-      _showError('Please enter a valid email');
+    
+    // Validate email
+    if (!_emailValid || _emailController.text.isEmpty) {
+      _showError(_emailError ?? 'Please enter a valid email');
       return false;
     }
-    if (_phoneController.text.isEmpty ||
-        _phoneController.text.length != 10) {
-      _showError('Please enter a valid 10-digit phone number');
+    
+    // Validate phone
+    if (!_phoneValid || _phoneController.text.isEmpty) {
+      _showError(_phoneError ?? 'Please enter a valid phone number');
       return false;
     }
-    if (_passwordController.text.isEmpty ||
-        _passwordController.text.length < 6) {
-      _showError('Password must be at least 6 characters');
+    
+    // Validate password
+    if (_passwordController.text.isEmpty || !_passwordStrong) {
+      _showError(_passwordError ?? 'Please create a strong password');
       return false;
     }
-    if (_passwordController.text !=
-        _confirmPasswordController.text) {
-      _showError('Passwords do not match');
+    
+    // Validate password match
+    if (!_passwordMatch) {
+      _showError(_confirmPasswordError ?? 'Passwords do not match');
       return false;
     }
+    
     return true;
   }
 
@@ -233,6 +563,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       if (_aadharController.text.isEmpty ||
           _aadharController.text.length != 12) {
         _showError('Please enter a valid 12-digit Aadhar number');
+        return false;
+      }
+      if (!_validateAadhar(_aadharController.text)) {
+        _showError('Invalid Aadhar number. Please check the number.');
+        return false;
+      }
+      if (!_aadharVerified) {
+        _showError('Please verify your Aadhar number with mobile OTP first');
         return false;
       }
       if (_selectedCrops.isEmpty) {
@@ -269,18 +607,50 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       ),
     );
   }
+  
+  Widget _buildVerificationItem(String label, bool isVerified) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            isVerified ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: isVerified ? Colors.green : Colors.grey,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isVerified ? Colors.green.shade700 : Colors.grey.shade600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _register() async {
+    developer.log('📝 Starting registration process...');
+    
     if (!_validateCommonFields() || !_validateRoleSpecificFields()) {
+      developer.log('❌ Validation failed');
       return;
     }
 
+    developer.log('✅ Validation passed');
+    developer.log('👤 User role: $_userRole');
+    developer.log('📧 Email: ${_emailController.text}');
+    developer.log('📱 Phone: ${_phoneController.text}');
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       final userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
+      developer.log('🆔 Generated userId: $userId');
 
       final user = User(
         userId: userId,
@@ -311,9 +681,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             : null,
       );
 
+      developer.log('🔄 Attempting to register user...');
       final success = await context.read<AuthProvider>().register(user);
+      developer.log('📊 Registration result: $success');
 
       if (success) {
+        developer.log('✅ Registration successful!');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -323,14 +697,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           );
           // Delay to show the message
           await Future.delayed(const Duration(seconds: 1));
+          
+          developer.log('🏠 Navigating to dashboard...');
+          developer.log('👤 User role: $_userRole');
           if (mounted) {
-            context.go('/dashboard');
+            // Navigate based on user role
+            if (_userRole == 'farmer') {
+              developer.log('🚜 Redirecting to farmer dashboard');
+              context.go('/dashboard');
+            } else if (_userRole == 'official') {
+              developer.log('👮 Redirecting to officer dashboard');
+              context.go('/officer-dashboard');
+            } else {
+              developer.log('❓ Unknown role, defaulting to dashboard');
+              context.go('/dashboard');
+            }
           }
         }
       } else {
+        developer.log('❌ Registration failed - email already exists');
         _showError('Email already registered. Please login instead.');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      developer.log('❌ Registration error: $e');
+      developer.log('Stack trace: $stackTrace');
       _showError('Registration failed: $e');
     } finally {
       if (mounted) {
@@ -348,7 +738,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         title: const Text('Register'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () => context.go('/login'),
         ),
       ),
       body: PageView(
@@ -382,64 +772,206 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             'Step 1: Basic Information',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          const SizedBox(height: 16),
+          // Verification status card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.verified_user, color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Verification Status',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _buildVerificationItem('Name Valid', _nameValid),
+                _buildVerificationItem('Email Verified', _emailVerified),
+                _buildVerificationItem('Phone Verified', _phoneVerified),
+                _buildVerificationItem('Password Strong', _passwordStrong),
+                _buildVerificationItem('Passwords Match', _passwordMatch),
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
           TextField(
             controller: _nameController,
             decoration: InputDecoration(
-              labelText: 'Full Name',
+              labelText: 'Full Name *',
               prefixIcon: const Icon(Icons.person),
+              suffixIcon: _nameController.text.isNotEmpty
+                  ? Icon(
+                      _nameValid ? Icons.check_circle : Icons.error,
+                      color: _nameValid ? Colors.green : Colors.red,
+                    )
+                  : null,
+              errorText: _nameError,
+              helperText: 'Enter your full name as per official documents',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
+            textCapitalization: TextCapitalization.words,
+            onChanged: _validateName,
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _emailController,
             decoration: InputDecoration(
-              labelText: 'Email Address',
+              labelText: 'Email Address *',
               prefixIcon: const Icon(Icons.email),
+              suffixIcon: _emailVerified
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : (_emailController.text.isNotEmpty && _emailValid
+                      ? const Icon(Icons.check_circle_outline, color: Colors.orange)
+                      : null),
+              errorText: _emailError,
+              helperText: _emailVerified ? 'Verified' : 'We will send an OTP to verify',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             keyboardType: TextInputType.emailAddress,
+            enabled: !_emailVerified,
+            onChanged: _validateEmail,
           ),
+          if (!_emailVerified) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _otpSent
+                      ? TextField(
+                          controller: _otpController,
+                          decoration: InputDecoration(
+                            labelText: 'Enter OTP',
+                            prefixIcon: const Icon(Icons.pin),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : (_otpSent 
+                          ? _verifyEmailOTP 
+                          : (_emailValid ? _sendEmailOTP : null)),
+                  child: Text(_otpSent ? 'Verify' : 'Send OTP'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           TextField(
             controller: _phoneController,
             decoration: InputDecoration(
-              labelText: 'Phone Number (10 digits)',
+              labelText: 'Phone Number *',
               prefixIcon: const Icon(Icons.phone),
+              prefixText: '+91 ',
+              suffixIcon: _phoneVerified
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : (_phoneController.text.isNotEmpty && _phoneValid
+                      ? const Icon(Icons.check_circle_outline, color: Colors.orange)
+                      : null),
+              errorText: _phoneError,
+              helperText: _phoneVerified ? 'Verified' : 'Enter 10-digit mobile number',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             keyboardType: TextInputType.phone,
+            enabled: !_phoneVerified,
+            maxLength: 10,
+            onChanged: _validatePhone,
           ),
+          if (!_phoneVerified) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _phoneOtpSent
+                      ? TextField(
+                          controller: _phoneOtpController,
+                          decoration: InputDecoration(
+                            labelText: 'Enter OTP',
+                            prefixIcon: const Icon(Icons.pin),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : (_phoneOtpSent 
+                          ? _verifyPhoneOTP 
+                          : (_phoneValid ? _sendPhoneOTP : null)),
+                  child: Text(_phoneOtpSent ? 'Verify' : 'Send OTP'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           TextField(
             controller: _passwordController,
             decoration: InputDecoration(
-              labelText: 'Password',
+              labelText: 'Password *',
               prefixIcon: const Icon(Icons.lock),
+              suffixIcon: _passwordStrong
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : null,
+              errorText: _passwordError,
+              helperText: _passwordError == null ? 'Use 8+ chars with uppercase, lowercase & number' : null,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             obscureText: true,
+            onChanged: (value) {
+              _checkPasswordStrength(value);
+              _validatePassword(value);
+            },
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _confirmPasswordController,
             decoration: InputDecoration(
-              labelText: 'Confirm Password',
+              labelText: 'Confirm Password *',
               prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: _passwordMatch && _confirmPasswordController.text.isNotEmpty
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : null,
+              errorText: _confirmPasswordError,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
             obscureText: true,
+            onChanged: (_) => _validatePasswordMatch(),
           ),
           const SizedBox(height: 24),
           Text(
@@ -524,7 +1056,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           Row(
             children: [
               TextButton(
-                onPressed: () => context.pop(),
+                onPressed: () => context.go('/login'),
                 child: const Text('Back to Login'),
               ),
               const Spacer(),
@@ -602,18 +1134,142 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 16),
+            // Aadhar Number Field
             TextField(
               controller: _aadharController,
               decoration: InputDecoration(
-                labelText: 'Aadhar Number (12 digits)',
+                labelText: 'Aadhar Number (12 digits) *',
                 prefixIcon: const Icon(Icons.badge),
+                suffixIcon: _aadharVerified
+                    ? const Icon(Icons.check_circle, color: Colors.green)
+                    : (_aadharController.text.length == 12
+                        ? (_validateAadhar(_aadharController.text)
+                            ? const Icon(Icons.info, color: Colors.orange)
+                            : const Icon(Icons.error, color: Colors.red))
+                        : null),
+                helperText: _aadharVerified
+                    ? '✅ Verified'
+                    : 'Required for insurance. Must be valid Aadhar.',
+                helperStyle: TextStyle(
+                  color: _aadharVerified ? Colors.green : null,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
               keyboardType: TextInputType.number,
+              maxLength: 12,
+              enabled: !_aadharVerified,
+              onChanged: (value) => setState(() {}),
             ),
-            const SizedBox(height: 24),
+            
+            // Aadhar Mobile Number Field
+            if (_aadharController.text.length == 12 &&
+                _validateAadhar(_aadharController.text) &&
+                !_aadharVerified) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _aadharMobileController,
+                decoration: InputDecoration(
+                  labelText: 'Aadhar-linked Mobile Number *',
+                  prefixIcon: const Icon(Icons.phone_android),
+                  helperText: 'Enter mobile number registered with this Aadhar',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                enabled: !_aadharOtpSent,
+              ),
+              
+              // Send OTP Button
+              if (_aadharMobileController.text.length == 10 && !_aadharOtpSent) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _sendAadharMobileOTP,
+                  icon: const Icon(Icons.sms),
+                  label: _isLoading
+                      ? const Text('Sending...')
+                      : const Text('Send OTP to Verify Aadhar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+              
+              // OTP Input Field
+              if (_aadharOtpSent && !_aadharVerified) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _aadharOtpController,
+                  decoration: InputDecoration(
+                    labelText: 'Enter OTP',
+                    prefixIcon: const Icon(Icons.lock),
+                    helperText: 'OTP sent to ${_aadharMobileController.text}',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _verifyAadharMobileOTP,
+                        icon: const Icon(Icons.verified_user),
+                        label: _isLoading
+                            ? const Text('Verifying...')
+                            : const Text('Verify OTP'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _sendAadharMobileOTP,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Resend'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+            
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Aadhar verification is mandatory for PMFBY insurance registration',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               'Select Crops You Grow',
               style: Theme.of(context).textTheme.titleMedium,

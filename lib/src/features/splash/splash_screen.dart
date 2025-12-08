@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import '../../widgets/app_icon.dart';
@@ -79,7 +80,7 @@ class _SplashScreenState extends State<SplashScreen>
       await Future.delayed(const Duration(milliseconds: 700));
       
       // Navigation is handled by parent - no action needed here
-      debugPrint('✅ Splash screen initialization complete');
+      if (kDebugMode) debugPrint('✅ Splash initialization complete');
     } catch (e) {
       debugPrint('❌ Initialization error: $e');
       // Still proceed after error

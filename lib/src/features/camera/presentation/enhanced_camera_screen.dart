@@ -9,7 +9,10 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:provider/provider.dart';
 import 'dart:math' as math;
+import '../../../providers/language_provider.dart';
+import '../../../localization/app_localizations.dart';
 
 class EnhancedCameraScreen extends StatefulWidget {
   const EnhancedCameraScreen({super.key});
@@ -302,43 +305,53 @@ class _EnhancedCameraScreenState extends State<EnhancedCameraScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Initializing Camera...',
-                    style: GoogleFonts.roboto(color: Colors.white),
-                  ),
-                ],
-              ),
-            )
-          : _error != null
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          backgroundColor: Colors.black,
+          body: _isLoading
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error, color: Colors.red, size: 48),
+                      const CircularProgressIndicator(color: Colors.white),
                       const SizedBox(height: 16),
                       Text(
-                        _error!,
+                        AppStrings.get('camera', 'initializing_camera', lang),
                         style: GoogleFonts.roboto(color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => context.pop(),
-                        child: const Text('Go Back'),
                       ),
                     ],
                   ),
                 )
-              : Stack(
+              : _error != null
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error, color: Colors.red, size: 48),
+                          const SizedBox(height: 16),
+                          Text(
+                            _error!,
+                            style: GoogleFonts.roboto(color: Colors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => context.pop(),
+                            child: Text(AppStrings.get('camera', 'go_back', lang)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _buildCameraView(context, lang),
+        );
+      },
+    );
+  }
+
+  Widget _buildCameraView(BuildContext context, String lang) {
+    return Stack(
                   children: [
                     // Camera Preview
                     Positioned.fill(
@@ -409,7 +422,7 @@ class _EnhancedCameraScreenState extends State<EnhancedCameraScreen>
                                     color: Colors.green.shade400, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'AR Crop Detection Mode',
+                                    AppStrings.get('camera', 'ar_crop_detection', lang),
                                     style: GoogleFonts.roboto(
                                       color: Colors.white,
                                       fontSize: 14,
@@ -422,18 +435,18 @@ class _EnhancedCameraScreenState extends State<EnhancedCameraScreen>
                               if (_currentPosition != null)
                                 _buildARInfoRow(
                                   Icons.location_on,
-                                  'Location',
+                                  AppStrings.get('camera', 'location', lang),
                                   '${_currentPosition!.latitude.toStringAsFixed(4)}, '
                                   '${_currentPosition!.longitude.toStringAsFixed(4)}',
                                 ),
                               _buildARInfoRow(
                                 Icons.camera,
-                                'Resolution',
+                                AppStrings.get('camera', 'resolution', lang),
                                 '${_controller!.value.previewSize?.height.toInt()}p',
                               ),
                               _buildARInfoRow(
                                 Icons.zoom_in,
-                                'Zoom',
+                                AppStrings.get('camera', 'zoom', lang),
                                 '${_currentZoom.toStringAsFixed(1)}x',
                               ),
                             ],
@@ -692,8 +705,7 @@ class _EnhancedCameraScreenState extends State<EnhancedCameraScreen>
                       ),
                     ),
                   ],
-                ),
-    );
+                );
   }
 
   Widget _buildARInfoRow(IconData icon, String label, String value) {

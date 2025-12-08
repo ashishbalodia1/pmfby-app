@@ -10,6 +10,8 @@ import '../../services/connectivity_service.dart';
 import '../../services/local_storage_service.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:convert';
+import '../../providers/language_provider.dart';
+import '../../localization/app_localizations.dart';
 
 enum UploadStatus {
   pending,
@@ -192,7 +194,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
     }
   }
 
-  Future<void> _pickImages() async {
+  Future<void> _pickImages(String lang) async {
     try {
       final List<XFile> images = await _picker.pickMultiImage();
       
@@ -220,14 +222,14 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
       if (connectivityService.isOnline) {
         _uploadPendingImages();
       } else {
-        _showSnackBar('📥 ${images.length} फोटो ऑफलाइन सहेजी गई। ऑनलाइन होने पर अपलोड होगी।', Colors.orange);
+        _showSnackBar('📥 ${AppStrings.get('uploads', 'photos_saved_offline', lang).replaceAll('{count}', '${images.length}')}', Colors.orange);
       }
     } catch (e) {
-      _showSnackBar('फोटो चुनने में त्रुटि: $e', Colors.red);
+      _showSnackBar('${AppStrings.get('uploads', 'photo_pick_error', lang)}: $e', Colors.red);
     }
   }
 
-  Future<void> _captureImage() async {
+  Future<void> _captureImage(String lang) async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.camera);
       
@@ -253,10 +255,10 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
       if (connectivityService.isOnline) {
         _uploadPendingImages();
       } else {
-        _showSnackBar('📷 फोटो ऑफलाइन सहेजी गई। GPS: ${position != null ? "✓" : "✗"}', Colors.orange);
+        _showSnackBar('📷 ${AppStrings.get('uploads', 'photo_saved_offline', lang).replaceAll('{status}', position != null ? "✓" : "✗")}', Colors.orange);
       }
     } catch (e) {
-      _showSnackBar('कैमरा एरर: $e', Colors.red);
+      _showSnackBar('${AppStrings.get('uploads', 'camera_error', lang)}: $e', Colors.red);
     }
   }
 
@@ -334,7 +336,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
         );
       });
 
-      _showSnackBar('✓ फोटो अपलोड हो गई', Colors.green);
+      // Photo uploaded message handled by localized snackbar
     } catch (e) {
       setState(() {
         final index = _uploadQueue.indexOf(item);
@@ -343,7 +345,6 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
           errorMessage: e.toString(),
         );
       });
-      _showSnackBar('❌ अपलोड विफल: ${e.toString()}', Colors.red);
     }
   }
 
@@ -398,18 +399,18 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
     }
   }
 
-  String _getStatusText(UploadStatus status) {
+  String _getStatusText(UploadStatus status, String lang) {
     switch (status) {
       case UploadStatus.completed:
-        return 'अपलोड हो गई ✓';
+        return AppStrings.get('uploads', 'uploaded_status', lang);
       case UploadStatus.uploading:
-        return 'अपलोड हो रही है...';
+        return AppStrings.get('uploads', 'uploading_status', lang);
       case UploadStatus.pending:
-        return 'लंबित';
+        return AppStrings.get('uploads', 'pending_status', lang);
       case UploadStatus.offline:
-        return 'ऑफलाइन सहेजी';
+        return AppStrings.get('uploads', 'offline_saved', lang);
       case UploadStatus.failed:
-        return 'विफल ❌';
+        return AppStrings.get('uploads', 'failed_status', lang);
     }
   }
 
@@ -438,174 +439,179 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
     ).length;
     final failedCount = _uploadQueue.where((i) => i.status == UploadStatus.failed).length;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        title: Text(
-          'बैच फोटो अपलोड',
-          style: GoogleFonts.notoSansDevanagari(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF1B5E20),
-        elevation: 2,
-        actions: [
-          if (!connectivityService.isOnline)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cloud_off, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        'ऑफलाइन',
-                        style: GoogleFonts.notoSansDevanagari(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          backgroundColor: const Color(0xFFFAFAFA),
+          appBar: AppBar(
+            title: Text(
+              AppStrings.get('uploads', 'batch_photo_upload', lang),
+              style: GoogleFonts.notoSansDevanagari(fontWeight: FontWeight.bold),
             ),
-        ],
-      ),
-      body: _isLoadingFromStorage
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Stats Cards
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.white,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'कुल',
-                          _uploadQueue.length.toString(),
-                          Icons.photo_library,
-                          const Color(0xFF1565C0),
-                        ),
+            backgroundColor: const Color(0xFF1B5E20),
+            elevation: 2,
+            actions: [
+              if (!connectivityService.isOnline)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'पूर्ण',
-                          completedCount.toString(),
-                          Icons.check_circle,
-                          const Color(0xFF2E7D32),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'लंबित',
-                          pendingCount.toString(),
-                          Icons.pending,
-                          const Color(0xFFF57C00),
-                        ),
-                      ),
-                      if (failedCount > 0) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            'विफल',
-                            failedCount.toString(),
-                            Icons.error,
-                            const Color(0xFFC62828),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_off, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppStrings.get('uploads', 'offline', lang),
+                            style: GoogleFonts.notoSansDevanagari(fontSize: 12),
                           ),
-                        ),
-                      ],
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                
-                // Upload List
-                Expanded(
-                  child: _uploadQueue.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.photo_library_outlined,
-                                size: 80,
-                                color: Colors.grey.shade400,
+            ],
+          ),
+          body: _isLoadingFromStorage
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  children: [
+                    // Stats Cards
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Colors.white,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              AppStrings.get('uploads', 'total', lang),
+                              _uploadQueue.length.toString(),
+                              Icons.photo_library,
+                              const Color(0xFF1565C0),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              AppStrings.get('uploads', 'complete', lang),
+                              completedCount.toString(),
+                              Icons.check_circle,
+                              const Color(0xFF2E7D32),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              AppStrings.get('uploads', 'pending', lang),
+                              pendingCount.toString(),
+                              Icons.pending,
+                              const Color(0xFFF57C00),
+                            ),
+                          ),
+                          if (failedCount > 0) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                AppStrings.get('uploads', 'failed', lang),
+                                failedCount.toString(),
+                                Icons.error,
+                                const Color(0xFFC62828),
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'कोई फोटो नहीं',
-                                style: GoogleFonts.notoSansDevanagari(
-                                  fontSize: 18,
-                                  color: Colors.grey.shade600,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    
+                    // Upload List
+                    Expanded(
+                      child: _uploadQueue.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.photo_library_outlined,
+                                    size: 80,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    AppStrings.get('uploads', 'no_photos', lang),
+                                    style: GoogleFonts.notoSansDevanagari(
+                                      fontSize: 18,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    AppStrings.get('uploads', 'press_button_add', lang),
+                                    style: GoogleFonts.notoSansDevanagari(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'फोटो जोड़ने के लिए नीचे बटन दबाएं',
-                                style: GoogleFonts.notoSansDevanagari(
-                                  fontSize: 14,
-                                  color: Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _uploadQueue.length,
+                              itemBuilder: (context, index) {
+                                final item = _uploadQueue[index];
+                                return _buildUploadCard(item, lang);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+          floatingActionButton: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (pendingCount > 0 && connectivityService.isOnline)
+                FloatingActionButton.extended(
+                  heroTag: 'upload_all',
+                  onPressed: _isUploading ? null : _uploadPendingImages,
+                  backgroundColor: const Color(0xFF0277BD),
+                  icon: _isUploading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _uploadQueue.length,
-                          itemBuilder: (context, index) {
-                            final item = _uploadQueue[index];
-                            return _buildUploadCard(item);
-                          },
-                        ),
+                      : const Icon(Icons.cloud_upload),
+                  label: Text(
+                    '${AppStrings.get('uploads', 'upload_all', lang)} ($pendingCount)',
+                    style: GoogleFonts.notoSansDevanagari(),
+                  ),
                 ),
-              ],
-            ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (pendingCount > 0 && connectivityService.isOnline)
-            FloatingActionButton.extended(
-              heroTag: 'upload_all',
-              onPressed: _isUploading ? null : _uploadPendingImages,
-              backgroundColor: const Color(0xFF0277BD),
-              icon: _isUploading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.cloud_upload),
-              label: Text(
-                'सभी अपलोड करें ($pendingCount)',
-                style: GoogleFonts.notoSansDevanagari(),
+              const SizedBox(height: 12),
+              FloatingActionButton(
+                heroTag: 'camera',
+                onPressed: () => _captureImage(lang),
+                backgroundColor: const Color(0xFF2E7D32),
+                child: const Icon(Icons.camera_alt),
               ),
-            ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'camera',
-            onPressed: _captureImage,
-            backgroundColor: const Color(0xFF2E7D32),
-            child: const Icon(Icons.camera_alt),
+              const SizedBox(height: 12),
+              FloatingActionButton(
+                heroTag: 'gallery',
+                onPressed: () => _pickImages(lang),
+                backgroundColor: const Color(0xFF1B5E20),
+                child: const Icon(Icons.photo_library),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'gallery',
-            onPressed: _pickImages,
-            backgroundColor: const Color(0xFF1B5E20),
-            child: const Icon(Icons.photo_library),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -641,7 +647,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
     );
   }
 
-  Widget _buildUploadCard(ImageUploadItem item) {
+  Widget _buildUploadCard(ImageUploadItem item, String lang) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -694,7 +700,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _getStatusText(item.status),
+                        _getStatusText(item.status, lang),
                         style: GoogleFonts.notoSansDevanagari(
                           fontSize: 11,
                           color: _getStatusColor(item.status),
@@ -738,14 +744,14 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${(item.uploadProgress * 100).toInt()}% पूर्ण',
+                    AppStrings.get('uploads', 'percent_complete', lang).replaceAll('{percent}', '${(item.uploadProgress * 100).toInt()}'),
                     style: GoogleFonts.notoSansDevanagari(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ],
                 if (item.errorMessage != null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'त्रुटि: ${item.errorMessage}',
+                    '${AppStrings.get('uploads', 'error_label', lang)}: ${item.errorMessage}',
                     style: GoogleFonts.notoSansDevanagari(
                       fontSize: 11,
                       color: const Color(0xFFC62828),
@@ -771,7 +777,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
                       children: [
                         const Icon(Icons.refresh, size: 20),
                         const SizedBox(width: 8),
-                        Text('पुनः प्रयास', style: GoogleFonts.notoSansDevanagari()),
+                        Text(AppStrings.get('uploads', 'retry_button', lang), style: GoogleFonts.notoSansDevanagari()),
                       ],
                     ),
                   ),
@@ -782,7 +788,7 @@ class _EnhancedBatchUploadScreenState extends State<EnhancedBatchUploadScreen> {
                       const Icon(Icons.delete, size: 20, color: Colors.red),
                       const SizedBox(width: 8),
                       Text(
-                        'हटाएं',
+                        AppStrings.get('uploads', 'delete', lang),
                         style: GoogleFonts.notoSansDevanagari(color: Colors.red),
                       ),
                     ],

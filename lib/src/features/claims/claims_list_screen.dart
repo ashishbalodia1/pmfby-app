@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../models/insurance_claim.dart';
+import '../../providers/language_provider.dart';
+import '../../localization/app_localizations.dart';
 
 class ClaimsListScreen extends StatefulWidget {
   const ClaimsListScreen({super.key});
@@ -17,7 +20,8 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // 4 tabs: All, Active, Approved, History
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   // Helper for Hindi text with proper Devanagari font
@@ -58,10 +62,19 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     super.dispose();
   }
 
-  // Demo claims data - in production, fetch from Firebase/MongoDB
+  // Demo claims data - in production, fetch from backend (Firebase/MongoDB/etc).
   List<InsuranceClaim> _getDemoClaims(String status) {
     final now = DateTime.now();
-    
+
+    // Return all claims for 'all' tab by combining categories
+    if (status == 'all') {
+      return [
+        ..._getDemoClaims('active'),
+        ..._getDemoClaims('approved'),
+        ..._getDemoClaims('history'),
+      ];
+    }
+
     if (status == 'active') {
       return [
         InsuranceClaim(
@@ -114,6 +127,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
         ),
       ];
     } else {
+      // history (paid/rejected etc.)
       return [
         InsuranceClaim(
           id: 'CLM004',
@@ -167,72 +181,79 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     }
   }
 
+  // Helper: format percentage safely (handles int/double/null)
+  String _formatPercentage(num? value) {
+    if (value == null) return 'N/A';
+    return value.toDouble().toStringAsFixed(0);
+  }
+
+  // Helper: format amount safely (handles int/double/null)
+  String _formatAmount(num? value) {
+    if (value == null) return 'N/A';
+    return value.toDouble().toStringAsFixed(0);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: Text(
-          'मेरे दावे',
-          style: hindiTextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            letterSpacing: 0.5,
+    // Using Consumer so UI responds to LanguageProvider changes
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          backgroundColor: Colors.grey.shade50,
+          appBar: AppBar(
+            title: Text(
+              AppStrings.get('claims', 'my_claims', lang),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: Colors.green.shade700,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.white,
+              indicatorWeight: 3,
+              labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+              isScrollable: true,
+              tabs: [
+                Tab(text: AppStrings.get('officer', 'all_claims', lang)),
+                Tab(text: AppStrings.get('claims', 'active', lang)),
+                Tab(text: AppStrings.get('status', 'approved', lang)),
+                Tab(text: AppStrings.get('claims', 'history', lang)),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () => context.push('/file-claim'),
+                tooltip: AppStrings.get('actions', 'file_claim', lang),
+              ),
+            ],
           ),
-        ),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          labelStyle: hindiTextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: Colors.white,
-            letterSpacing: 0.3,
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildClaimsList('all', lang),
+              _buildClaimsList('active', lang),
+              _buildClaimsList('approved', lang),
+              _buildClaimsList('history', lang),
+            ],
           ),
-          tabs: const [
-            Tab(text: 'सक्रिय'),
-            Tab(text: 'स्वीकृत'),
-            Tab(text: 'पिछले'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
+          floatingActionButton: FloatingActionButton.extended(
             onPressed: () => context.push('/file-claim'),
-            tooltip: 'नया दावा दर्ज करें',
+            backgroundColor: Colors.green.shade700,
+            icon: const Icon(Icons.add),
+            label: Text(
+              AppStrings.get('claims', 'new_claim', lang),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
           ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildClaimsList('active'),
-          _buildClaimsList('approved'),
-          _buildClaimsList('history'),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/file-claim'),
-        backgroundColor: Colors.green.shade700,
-        icon: const Icon(Icons.add),
-        label: Text(
-          'नया दावा',
-          style: hindiTextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildClaimsList(String status) {
+  Widget _buildClaimsList(String status, String lang) {
     final claims = _getDemoClaims(status);
 
     if (claims.isEmpty) {
@@ -248,21 +269,21 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
             const SizedBox(height: 16),
             Text(
               status == 'active'
-                  ? 'कोई सक्रिय दावा नहीं'
+                  ? AppStrings.get('claims', 'no_active_claims', lang)
                   : status == 'approved'
-                      ? 'कोई स्वीकृत दावा नहीं'
-                      : 'कोई पिछला दावा नहीं',
-              style: hindiTextStyle(
-                fontSize: 17,
+                      ? (lang == 'hi' ? 'कोई स्वीकृत दावा नहीं' : 'No approved claims')
+                      : AppStrings.get('claims', 'no_claims_found', lang),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
                 color: Colors.grey.shade600,
                 letterSpacing: 0.3,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'नया दावा दर्ज करने के लिए + बटन दबाएं',
-              style: hindiTextStyle(
-                fontSize: 14,
+              AppStrings.get('claims', 'file_new_claim', lang),
+              style: GoogleFonts.poppins(
+                fontSize: 13,
                 color: Colors.grey.shade500,
                 letterSpacing: 0.2,
               ),
@@ -274,7 +295,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
 
     return RefreshIndicator(
       onRefresh: () async {
-        // Refresh claims data
+        // In production, re-fetch claims from backend here.
         await Future.delayed(const Duration(seconds: 1));
       },
       child: ListView.builder(
@@ -282,16 +303,16 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
         itemCount: claims.length + 1,
         itemBuilder: (context, index) {
           if (index == 0) {
-            return _buildStatsCard(status);
+            return _buildStatsCard(status, lang);
           }
           final claim = claims[index - 1];
-          return _buildClaimCard(claim);
+          return _buildClaimCard(claim, lang);
         },
       ),
     );
   }
 
-  Widget _buildStatsCard(String status) {
+  Widget _buildStatsCard(String status, String lang) {
     final activeClaims = _getDemoClaims('active');
     final approvedClaims = _getDemoClaims('approved');
     final historyClaims = _getDemoClaims('history');
@@ -316,9 +337,9 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'दावा सारांश',
-            style: hindiTextStyle(
-              fontSize: 19,
+            AppStrings.get('claims', 'claims_summary', lang),
+            style: GoogleFonts.poppins(
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: Colors.white,
               letterSpacing: 0.5,
@@ -330,19 +351,19 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
             children: [
               _buildStatItem(
                 activeClaims.length.toString(),
-                'सक्रिय',
+                AppStrings.get('claims', 'active', lang),
                 Icons.pending_actions,
               ),
               Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
               _buildStatItem(
                 approvedClaims.length.toString(),
-                'स्वीकृत',
+                AppStrings.get('claims', 'approved_claims', lang),
                 Icons.check_circle,
               ),
               Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
               _buildStatItem(
                 historyClaims.length.toString(),
-                'कुल',
+                AppStrings.get('claims', 'total', lang),
                 Icons.history,
               ),
             ],
@@ -378,7 +399,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildClaimCard(InsuranceClaim claim) {
+  Widget _buildClaimCard(InsuranceClaim claim, String lang) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -431,8 +452,8 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                             ),
                           ),
                           Text(
-                            'दावा #${claim.id}',
-                            style: englishTextStyle(
+                            '${lang == 'hi' ? 'दावा' : 'Claim'} #${claim.id}',
+                            style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
@@ -440,7 +461,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                         ],
                       ),
                     ),
-                    _buildStatusChip(claim.status),
+                    _buildStatusChip(claim.status, lang),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -451,9 +472,9 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                     Icon(Icons.warning_amber, size: 16, color: Colors.orange.shade700),
                     const SizedBox(width: 6),
                     Text(
-                      'कारण: ${claim.damageReason}',
-                      style: hindiTextStyle(
-                        fontSize: 14,
+                      '${lang == 'hi' ? 'कारण' : 'Reason'}: ${claim.damageReason}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
                         color: Colors.grey.shade700,
                         letterSpacing: 0.2,
                       ),
@@ -466,9 +487,9 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                     Icon(Icons.calendar_today, size: 16, color: Colors.blue.shade700),
                     const SizedBox(width: 6),
                     Text(
-                      'तिथि: ${DateFormat('dd MMM yyyy').format(claim.incidentDate)}',
-                      style: hindiTextStyle(
-                        fontSize: 14,
+                      '${lang == 'hi' ? 'तिथि' : 'Date'}: ${DateFormat('dd MMM yyyy').format(claim.incidentDate)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
                         color: Colors.grey.shade700,
                         letterSpacing: 0.2,
                       ),
@@ -481,16 +502,16 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                     Icon(Icons.percent, size: 16, color: Colors.red.shade700),
                     const SizedBox(width: 6),
                     Text(
-                      'नुकसान: ${claim.estimatedLossPercentage?.toStringAsFixed(0) ?? 'N/A'}%',
-                      style: hindiTextStyle(
-                        fontSize: 14,
+                      '${lang == 'hi' ? 'नुकसान' : 'Loss'}: ${_formatPercentage(claim.estimatedLossPercentage)}%',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
                         color: Colors.grey.shade700,
                         letterSpacing: 0.2,
                       ),
                     ),
                     const Spacer(),
                     Text(
-                      '₹${claim.claimAmount?.toStringAsFixed(0) ?? 'N/A'}',
+                      '₹${_formatAmount(claim.claimAmount)}',
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -534,7 +555,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildStatusChip(ClaimStatus status) {
+  Widget _buildStatusChip(ClaimStatus status, String lang) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -542,9 +563,9 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        _getStatusText(status),
-        style: hindiTextStyle(
-          fontSize: 12,
+        _getStatusText(status, lang),
+        style: GoogleFonts.poppins(
+          fontSize: 11,
           fontWeight: FontWeight.w600,
           color: Colors.white,
           letterSpacing: 0.3,
@@ -587,20 +608,38 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     }
   }
 
-  String _getStatusText(ClaimStatus status) {
-    switch (status) {
-      case ClaimStatus.draft:
-        return 'मसौदा';
-      case ClaimStatus.submitted:
-        return 'प्रस्तुत';
-      case ClaimStatus.underReview:
-        return 'समीक्षाधीन';
-      case ClaimStatus.approved:
-        return 'स्वीकृत';
-      case ClaimStatus.rejected:
-        return 'अस्वीकृत';
-      case ClaimStatus.paid:
-        return 'भुगतान किया';
+  // Localized status text
+  String _getStatusText(ClaimStatus status, String lang) {
+    if (lang == 'hi') {
+      switch (status) {
+        case ClaimStatus.draft:
+          return 'मसौदा';
+        case ClaimStatus.submitted:
+          return 'प्रस्तुत';
+        case ClaimStatus.underReview:
+          return 'समीक्षाधीन';
+        case ClaimStatus.approved:
+          return 'स्वीकृत';
+        case ClaimStatus.rejected:
+          return 'अस्वीकृत';
+        case ClaimStatus.paid:
+          return 'भुगतान किया';
+      }
+    } else {
+      switch (status) {
+        case ClaimStatus.draft:
+          return 'Draft';
+        case ClaimStatus.submitted:
+          return 'Submitted';
+        case ClaimStatus.underReview:
+          return 'Under Review';
+        case ClaimStatus.approved:
+          return 'Approved';
+        case ClaimStatus.rejected:
+          return 'Rejected';
+        case ClaimStatus.paid:
+          return 'Paid';
+      }
     }
   }
 
@@ -670,7 +709,8 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                       ],
                     ),
                   ),
-                  _buildStatusChip(claim.status),
+                  // Use current language from provider for details sheet chip
+                  _buildStatusChip(claim.status, context.read<LanguageProvider>().currentLanguage),
                 ],
               ),
               const SizedBox(height: 24),
@@ -679,8 +719,8 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
               _buildDetailRow('दावा दर्ज', DateFormat('dd MMMM yyyy').format(claim.submittedAt), Icons.send),
               if (claim.reviewedAt != null)
                 _buildDetailRow('समीक्षा तिथि', DateFormat('dd MMMM yyyy').format(claim.reviewedAt!), Icons.rate_review),
-              _buildDetailRow('अनुमानित नुकसान', '${claim.estimatedLossPercentage?.toStringAsFixed(0) ?? 'N/A'}%', Icons.percent),
-              _buildDetailRow('दावा राशि', '₹${claim.claimAmount?.toStringAsFixed(0) ?? 'N/A'}', Icons.currency_rupee),
+              _buildDetailRow('अनुमानित नुकसान', '${_formatPercentage(claim.estimatedLossPercentage)}%', Icons.percent),
+              _buildDetailRow('दावा राशि', '₹${_formatAmount(claim.claimAmount)}', Icons.currency_rupee),
               if (claim.approvedAmount != null)
                 _buildDetailRow('स्वीकृत राशि', '₹${claim.approvedAmount}', Icons.check_circle),
               const SizedBox(height: 16),
@@ -725,13 +765,13 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: claim.status == ClaimStatus.rejected 
-                        ? Colors.red.shade50 
+                    color: claim.status == ClaimStatus.rejected
+                        ? Colors.red.shade50
                         : Colors.green.shade50,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: claim.status == ClaimStatus.rejected 
-                          ? Colors.red.shade200 
+                      color: claim.status == ClaimStatus.rejected
+                          ? Colors.red.shade200
                           : Colors.green.shade200,
                     ),
                   ),

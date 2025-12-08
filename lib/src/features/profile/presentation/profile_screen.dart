@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../settings/language_settings_screen.dart';
 import '../../../providers/language_provider.dart';
+import '../../../localization/app_localizations.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,7 +17,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final bool _isEditing = false;
 
-  // Helper for Hindi text
+  // Hindi font helper
   TextStyle hindiTextStyle({
     double? fontSize,
     FontWeight? fontWeight,
@@ -33,7 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Helper for English text
+  // English font helper
   TextStyle englishTextStyle({
     double? fontSize,
     FontWeight? fontWeight,
@@ -50,13 +51,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<AuthProvider, LanguageProvider>(
+      builder: (context, authProvider, languageProvider, child) {
         final user = authProvider.currentUser;
-        
+        final lang = languageProvider.currentLanguage;
+
         if (user == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Profile')),
+            appBar: AppBar(title: Text(AppStrings.get('profile', 'profile', lang))),
             body: const Center(child: Text('No user data available')),
           );
         }
@@ -65,7 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           backgroundColor: Colors.grey.shade50,
           body: CustomScrollView(
             slivers: [
-              // Profile Header with Gradient
+              // Profile header
               SliverAppBar(
                 expandedHeight: 240,
                 floating: false,
@@ -75,19 +77,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   background: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
                         colors: [
                           Colors.green.shade700,
                           Colors.green.shade500,
                         ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const SizedBox(height: 60),
-                        // Profile Avatar
+
+                        // Avatar
                         Container(
                           width: 100,
                           height: 100,
@@ -104,7 +107,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: Center(
                             child: Text(
-                              user.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').join().toUpperCase(),
+                              user.name
+                                  .split(' ')
+                                  .map((e) => e.isNotEmpty ? e[0] : '')
+                                  .join()
+                                  .toUpperCase(),
                               style: GoogleFonts.poppins(
                                 fontSize: 36,
                                 fontWeight: FontWeight.bold,
@@ -113,7 +120,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 12),
+
+                        // Name
                         Text(
                           user.name,
                           style: GoogleFonts.poppins(
@@ -122,7 +132,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: Colors.white,
                           ),
                         ),
+
                         const SizedBox(height: 4),
+
+                        // Role badge (resolved)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                           decoration: BoxDecoration(
@@ -130,9 +143,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            user.role == 'farmer' ? '👨‍🌾 किसान | Farmer' : '👔 अधिकारी | Official',
-                            style: hindiTextStyle(
-                              fontSize: 15,
+                            user.role == 'farmer'
+                                ? '👨‍🌾 ${AppStrings.get('profile', 'farmer', lang)}'
+                                : '👔 ${AppStrings.get('profile', 'official', lang)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.3,
@@ -145,53 +160,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-              // Profile Content
+              // Body content
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Contact Information Card
+                      // Contact info card
                       _buildInfoCard(
-                        title: 'संपर्क जानकारी',
-                        subtitle: 'Contact Information',
+                        title: AppStrings.get('profile', 'contact_information', lang),
                         icon: Icons.contact_phone,
                         children: [
-                          _buildInfoRow(Icons.phone, 'Phone', user.phone),
-                          _buildInfoRow(Icons.email, 'Email', user.email),
+                          _buildInfoRow(Icons.phone, AppStrings.get('profile', 'phone', lang), user.phone),
+                          _buildInfoRow(Icons.email, AppStrings.get('profile', 'email', lang), user.email),
                         ],
                       ),
 
                       const SizedBox(height: 16),
 
-                      // Location/Department Card
+                      // Farmer-specific cards
                       if (user.role == 'farmer') ...[
                         _buildInfoCard(
-                          title: 'स्थान विवरण',
-                          subtitle: 'Location Details',
+                          title: AppStrings.get('profile', 'location_details', lang),
                           icon: Icons.location_on,
                           children: [
-                            _buildInfoRow(Icons.home, 'Village', user.village ?? 'Not specified'),
-                            _buildInfoRow(Icons.location_city, 'District', user.district ?? 'Not specified'),
-                            _buildInfoRow(Icons.map, 'State', user.state ?? 'Not specified'),
+                            _buildInfoRow(Icons.home, AppStrings.get('profile', 'village', lang), user.village ?? 'Not specified'),
+                            _buildInfoRow(Icons.location_city, AppStrings.get('profile', 'district', lang), user.district ?? 'Not specified'),
+                            _buildInfoRow(Icons.map, AppStrings.get('profile', 'state', lang), user.state ?? 'Not specified'),
                           ],
                         ),
+
                         const SizedBox(height: 16),
+
                         _buildInfoCard(
-                          title: 'खेत की जानकारी',
-                          subtitle: 'Farm Information',
+                          title: AppStrings.get('profile', 'farm_information', lang),
                           icon: Icons.agriculture,
                           children: [
                             _buildInfoRow(
                               Icons.landscape,
-                              'Farm Size',
+                              AppStrings.get('profile', 'farm_size', lang),
                               user.farmSize != null ? '${user.farmSize} acres' : 'Not specified',
                             ),
                             _buildInfoRow(
                               Icons.badge,
                               'Aadhaar',
-                              user.aadharNumber != null && user.aadharNumber!.length >= 4
+                              (user.aadharNumber != null && user.aadharNumber!.length >= 4)
                                   ? '****-****-${user.aadharNumber!.substring(user.aadharNumber!.length - 4)}'
                                   : 'Not provided',
                             ),
@@ -200,9 +214,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ] else ...[
+                        // Official details card
                         _buildInfoCard(
-                          title: 'अधिकारी विवरण',
-                          subtitle: 'Official Details',
+                          title: AppStrings.get('profile', 'official_details', lang),
                           icon: Icons.work,
                           children: [
                             _buildInfoRow(Icons.badge, 'Official ID', user.officialId ?? 'Not assigned'),
@@ -215,23 +229,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Statistics Card (for farmers)
-                      if (user.role == 'farmer')
-                        _buildStatsCard(),
+                      if (user.role == 'farmer') _buildStatsCard(),
 
                       const SizedBox(height: 16),
 
-                      // Settings Options
+                      // Settings
                       _buildInfoCard(
-                        title: 'सेटिंग्स और सहायता',
-                        subtitle: 'Settings & Support',
+                        title: AppStrings.get('profile', 'settings_support', lang),
                         icon: Icons.settings,
                         children: [
                           _buildActionTile(
                             icon: Icons.edit,
-                            title: 'प्रोफ़ाइल संपादित करें',
-                            subtitle: 'Edit Profile',
-                            englishSubtitle: 'Update your information',
+                            title: AppStrings.get('profile', 'edit_profile', lang),
+                            subtitle: "Update your information",
                             onTap: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Edit feature coming soon!')),
@@ -240,9 +250,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           _buildActionTile(
                             icon: Icons.lock,
-                            title: 'पासवर्ड बदलें',
-                            subtitle: 'Change Password',
-                            englishSubtitle: 'Update your security settings',
+                            title: AppStrings.get('profile', 'change_password', lang),
+                            subtitle: "Update your security settings",
                             onTap: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Password change coming soon!')),
@@ -251,9 +260,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           _buildActionTile(
                             icon: Icons.notifications,
-                            title: 'सूचनाएं',
-                            subtitle: 'Notifications',
-                            englishSubtitle: 'Manage notification preferences',
+                            title: AppStrings.get('profile', 'notifications', lang),
+                            subtitle: "Manage notification preferences",
                             onTap: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Notification settings coming soon!')),
@@ -262,60 +270,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           _buildActionTile(
                             icon: Icons.language,
-                            title: 'भाषा बदलें',
-                            subtitle: 'Change Language',
-                            englishSubtitle: 'Select your preferred language',
+                            title: AppStrings.get('actions', 'change_language', lang),
+                            subtitle: "Select your preferred language",
                             onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => const LanguageSettingsScreen(),
-                                ),
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
                               );
                             },
                           ),
                           _buildActionTile(
                             icon: Icons.help_outline,
-                            title: 'सहायता और समर्थन',
-                            subtitle: 'Help & Support',
-                            englishSubtitle: 'Get help and contact support',
-                            onTap: () {
-                              _showHelpDialog();
-                            },
+                            title: AppStrings.get('profile', 'help_support', lang),
+                            subtitle: "Get help and contact support",
+                            onTap: () => _showHelpDialog(lang),
                           ),
+
                           const Divider(height: 32),
+
                           _buildActionTile(
                             icon: Icons.logout,
-                            title: 'लॉगआउट',
-                            subtitle: 'Logout',
-                            englishSubtitle: 'Sign out from your account',
+                            title: AppStrings.get('profile', 'logout', lang),
+                            subtitle: "Sign out from your account",
                             isDestructive: true,
-                            onTap: () {
-                              _showLogoutDialog();
-                            },
+                            onTap: () => _showLogoutDialog(lang),
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 16),
 
-                      // Version Info
+                      // Footer
                       Center(
                         child: Text(
                           'Krishi Bandhu - PMFBY v2.0.0',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+                          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Center(
                         child: Text(
                           'PMFBY - Pradhan Mantri Fasal Bima Yojana',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
-                          ),
+                          style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade500),
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -329,6 +325,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
   }
+
+  // ---------------------------- COMPONENTS ---------------------------- //
 
   Widget _buildInfoCard({
     required String title,
@@ -351,8 +349,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Container(
@@ -393,12 +392,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
+
           const Divider(height: 1),
+
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: children,
-            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(children: children),
           ),
         ],
       ),
@@ -407,7 +406,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
           Container(
@@ -423,21 +422,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
+                Text(label, style: englishTextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: GoogleFonts.poppins(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
+                  style: englishTextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -449,7 +438,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildChipRow(IconData icon, String label, List<String> items) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -464,27 +453,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Icon(icon, size: 20, color: Colors.green.shade700),
               ),
               const SizedBox(width: 12),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
+              Text(label, style: englishTextStyle(fontSize: 12, color: Colors.grey.shade600)),
             ],
           ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: items.map((crop) => Chip(
-              label: Text(
-                crop,
-                style: GoogleFonts.poppins(fontSize: 12),
-              ),
-              backgroundColor: Colors.green.shade50,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            )).toList(),
+            children: items
+                .map(
+                  (crop) => Chip(
+                    label: Text(crop, style: englishTextStyle(fontSize: 12)),
+                    backgroundColor: Colors.green.shade50,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),
@@ -494,28 +478,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatsCard() {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.green.shade600, Colors.green.shade800],
-        ),
+        gradient: LinearGradient(colors: [Colors.green.shade600, Colors.green.shade800]),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.green.withOpacity(0.3),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Your Statistics',
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          Consumer<LanguageProvider>(
+            builder: (context, langProvider, child) => Text(
+              AppStrings.get('profile', 'your_statistics', langProvider.currentLanguage),
+              style: englishTextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
             ),
           ),
           const SizedBox(height: 16),
@@ -537,24 +510,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatItem(String value, String label, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: Colors.white, size: 28),
+        Icon(icon, size: 28, color: Colors.white),
         const SizedBox(height: 8),
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            fontSize: 11,
-            color: Colors.white.withOpacity(0.9),
-          ),
-        ),
+        Text(value, style: englishTextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(label, textAlign: TextAlign.center, style: englishTextStyle(fontSize: 11, color: Colors.white70)),
       ],
     );
   }
@@ -571,7 +530,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         child: Row(
           children: [
             Container(
@@ -597,106 +556,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: isDestructive ? Colors.red : Colors.black87,
-                      letterSpacing: 0.3,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: englishTextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  if (englishSubtitle != null) ...[
-                    Text(
-                      englishSubtitle,
-                      style: englishTextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                  Text(subtitle, style: englishTextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  if (englishSubtitle != null)
+                    Text(englishSubtitle, style: englishTextStyle(fontSize: 11, color: Colors.grey.shade500)),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: isDestructive ? Colors.red : Colors.grey.shade400,
-            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: isDestructive ? Colors.red : Colors.grey.shade400),
           ],
         ),
       ),
     );
   }
 
-  void _showHelpDialog() {
+  // ---------------------------- DIALOGS ---------------------------- //
+
+  void _showHelpDialog(String lang) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: Text(
-          'Help & Support',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          AppStrings.get('profile', 'help_support', lang),
+          style: englishTextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
               leading: const Icon(Icons.phone, color: Colors.green),
               title: const Text('Helpline'),
               subtitle: const Text('1800-123-4567 (Toll Free)'),
-              contentPadding: EdgeInsets.zero,
             ),
             ListTile(
               leading: const Icon(Icons.email, color: Colors.green),
               title: const Text('Email'),
               subtitle: const Text('support@krashibandhu.gov.in'),
-              contentPadding: EdgeInsets.zero,
             ),
             ListTile(
               leading: const Icon(Icons.language, color: Colors.green),
               title: const Text('Website'),
               subtitle: const Text('www.pmfby.gov.in'),
-              contentPadding: EdgeInsets.zero,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(AppStrings.get('dashboard', 'close', lang)),
           ),
         ],
       ),
     );
   }
 
-  void _showLogoutDialog() {
+  void _showLogoutDialog(String lang) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
-          'Logout',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          AppStrings.get('profile', 'logout', lang),
+          style: englishTextStyle(fontWeight: FontWeight.bold),
         ),
-        content: const Text('Are you sure you want to logout from your account?'),
+        content: Text(AppStrings.get('profile', 'are_you_sure_logout', lang)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(AppStrings.get('profile', 'cancel', lang)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               await context.read<AuthProvider>().logout();
-              if (context.mounted) {
-                context.goNamed('login');
-              }
+              if (mounted) context.go('/login');
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Logout'),
+            child: Text(AppStrings.get('profile', 'logout', lang)),
           ),
         ],
       ),

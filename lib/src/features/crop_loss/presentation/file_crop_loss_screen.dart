@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/crop_loss_report.dart';
 import '../../premium_calculator/data/india_data.dart';
+import '../../../providers/language_provider.dart';
+import '../../../localization/app_localizations.dart';
 
 class FileCropLossScreen extends StatefulWidget {
   const FileCropLossScreen({super.key});
@@ -87,257 +90,262 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'File Crop Loss Report',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Colors.red.shade700,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.red.shade700,
-              Colors.white,
-            ],
-            stops: const [0.0, 0.15],
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              AppStrings.get('cropLoss', 'file_report_title', lang),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: Colors.red.shade700,
+            foregroundColor: Colors.white,
+            elevation: 0,
           ),
-        ),
-        child: Column(
-          children: [
-            // Progress indicator
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(Icons.edit_document, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Fill all required details',
-                    style: GoogleFonts.roboto(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.red.shade700,
+                  Colors.white,
                 ],
+                stops: const [0.0, 0.15],
               ),
             ),
-
-            // Form
-            Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
-                  ),
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Progress indicator
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      // Photo Section
-                      _buildSectionHeader('1. Crop Damage Photos', Icons.camera_alt),
-                      const SizedBox(height: 12),
-                      _buildPhotoUploadSection(),
-                      const SizedBox(height: 24),
-
-                      // Crop Details
-                      _buildSectionHeader('2. Crop Details', Icons.eco),
-                      const SizedBox(height: 12),
-                      _buildDropdownField(
-                        label: 'Season *',
-                        value: _selectedSeason,
-                        items: _seasons,
-                        onChanged: (value) => setState(() => _selectedSeason = value),
-                        icon: Icons.calendar_month,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdownField(
-                        label: 'Crop Type *',
-                        value: _selectedCrop,
-                        items: IndiaData.getCrops(),
-                        onChanged: (value) => setState(() => _selectedCrop = value),
-                        icon: Icons.grass,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _areaController,
-                        label: 'Affected Area (hectares) *',
-                        icon: Icons.square_foot,
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter affected area';
-                          }
-                          if (double.tryParse(value) == null || double.parse(value) <= 0) {
-                            return 'Please enter valid area';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Loss Details
-                      _buildSectionHeader('3. Loss Details', Icons.warning),
-                      const SizedBox(height: 12),
-                      _buildDropdownField(
-                        label: 'Loss Type *',
-                        value: _selectedLossType,
-                        items: _lossTypes,
-                        onChanged: (value) => setState(() => _selectedLossType = value),
-                        icon: Icons.report_problem,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdownField(
-                        label: 'Estimated Loss Percentage *',
-                        value: _selectedLossPercentage,
-                        items: _lossPercentages,
-                        onChanged: (value) => setState(() => _selectedLossPercentage = value),
-                        icon: Icons.percent,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDateField(),
-                      const SizedBox(height: 24),
-
-                      // Location Details
-                      _buildSectionHeader('4. Location Details', Icons.location_on),
-                      const SizedBox(height: 12),
-                      _buildDropdownField(
-                        label: 'State *',
-                        value: _selectedState,
-                        items: IndiaData.getStates(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedState = value;
-                            _selectedDistrict = null;
-                          });
-                        },
-                        icon: Icons.location_city,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdownField(
-                        label: 'District *',
-                        value: _selectedDistrict,
-                        items: _selectedState != null 
-                            ? IndiaData.getDistricts(_selectedState!) 
-                            : [],
-                        onChanged: (value) => setState(() => _selectedDistrict = value),
-                        icon: Icons.map,
-                        enabled: _selectedState != null,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _villageController,
-                        label: 'Village *',
-                        icon: Icons.home,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter village name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLocationCard(),
-                      const SizedBox(height: 24),
-
-                      // Description
-                      _buildSectionHeader('5. Description', Icons.description),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _descriptionController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: 'Describe the crop damage in detail...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.red.shade700, width: 2),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please provide description';
-                          }
-                          if (value.length < 20) {
-                            return 'Description must be at least 20 characters';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Submit Button
-                      ElevatedButton(
-                        onPressed: _submitReport,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 4,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.send),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Submit Report',
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                      Icon(Icons.edit_document, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppStrings.get('cropLoss', 'fill_all_required', lang),
+                        style: GoogleFonts.roboto(
+                          color: Colors.white,
+                          fontSize: 14,
                         ),
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // Need Help Button
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          // Show help dialog
-                          _showHelpDialog();
-                        },
-                        icon: const Icon(Icons.help_outline),
-                        label: const Text('Need Help?'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
-              ),
+
+                // Form
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          // Photo Section
+                          _buildSectionHeader('1. ${AppStrings.get('cropLoss', 'crop_damage_photos', lang)}', Icons.camera_alt),
+                          const SizedBox(height: 12),
+                          _buildPhotoUploadSection(lang),
+                          const SizedBox(height: 24),
+
+                          // Crop Details
+                          _buildSectionHeader('2. ${AppStrings.get('cropLoss', 'crop_details', lang)}', Icons.eco),
+                          const SizedBox(height: 12),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'season', lang)} *',
+                            value: _selectedSeason,
+                            items: _seasons,
+                            onChanged: (value) => setState(() => _selectedSeason = value),
+                            icon: Icons.calendar_month,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'crop_type', lang)} *',
+                            value: _selectedCrop,
+                            items: IndiaData.getCrops(),
+                            onChanged: (value) => setState(() => _selectedCrop = value),
+                            icon: Icons.grass,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _areaController,
+                            label: '${AppStrings.get('cropLoss', 'affected_area_hectares', lang)} *',
+                            icon: Icons.square_foot,
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter affected area';
+                              }
+                              if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                                return 'Please enter valid area';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Loss Details
+                          _buildSectionHeader('3. ${AppStrings.get('cropLoss', 'loss_details', lang)}', Icons.warning),
+                          const SizedBox(height: 12),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'loss_type', lang)} *',
+                            value: _selectedLossType,
+                            items: _lossTypes,
+                            onChanged: (value) => setState(() => _selectedLossType = value),
+                            icon: Icons.report_problem,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'estimated_loss', lang)} *',
+                            value: _selectedLossPercentage,
+                            items: _lossPercentages,
+                            onChanged: (value) => setState(() => _selectedLossPercentage = value),
+                            icon: Icons.percent,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDateField(lang),
+                          const SizedBox(height: 24),
+
+                          // Location Details
+                          _buildSectionHeader('4. ${AppStrings.get('cropLoss', 'location_details', lang)}', Icons.location_on),
+                          const SizedBox(height: 12),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'state', lang)} *',
+                            value: _selectedState,
+                            items: IndiaData.getStates(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedState = value;
+                                _selectedDistrict = null;
+                              });
+                            },
+                            icon: Icons.location_city,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdownField(
+                            label: '${AppStrings.get('cropLoss', 'district', lang)} *',
+                            value: _selectedDistrict,
+                            items: _selectedState != null 
+                                ? IndiaData.getDistricts(_selectedState!) 
+                                : [],
+                            onChanged: (value) => setState(() => _selectedDistrict = value),
+                            icon: Icons.map,
+                            enabled: _selectedState != null,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _villageController,
+                            label: '${AppStrings.get('cropLoss', 'village', lang)} *',
+                            icon: Icons.home,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter village name';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildLocationCard(lang),
+                          const SizedBox(height: 24),
+
+                          // Description
+                          _buildSectionHeader('5. ${AppStrings.get('cropLoss', 'description', lang)}', Icons.description),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _descriptionController,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: AppStrings.get('cropLoss', 'describe_damage', lang),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: Colors.red.shade700, width: 2),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please provide description';
+                              }
+                              if (value.length < 20) {
+                                return 'Description must be at least 20 characters';
+                              }
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // Submit Button
+                          ElevatedButton(
+                            onPressed: () => _submitReport(lang),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 4,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.send),
+                                const SizedBox(width: 12),
+                                Text(
+                                  AppStrings.get('cropLoss', 'submit_report', lang),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Need Help Button
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              // Show help dialog
+                              _showHelpDialog(lang);
+                            },
+                            icon: const Icon(Icons.help_outline),
+                            label: Text(AppStrings.get('cropLoss', 'need_help', lang)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -365,7 +373,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
     );
   }
 
-  Widget _buildPhotoUploadSection() {
+  Widget _buildPhotoUploadSection(String lang) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -381,12 +389,12 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
                 Icon(Icons.add_a_photo, size: 48, color: Colors.grey.shade400),
                 const SizedBox(height: 12),
                 Text(
-                  'No photos added yet',
+                  AppStrings.get('cropLoss', 'no_photos_added', lang),
                   style: GoogleFonts.roboto(color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Add 4-5 clear photos from different angles',
+                  AppStrings.get('cropLoss', 'add_photos_instruction', lang),
                   style: GoogleFonts.roboto(
                     fontSize: 12,
                     color: Colors.grey.shade500,
@@ -405,7 +413,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Photos will be compressed automatically to save upload time',
+                          AppStrings.get('cropLoss', 'auto_compress_info', lang),
                           style: GoogleFonts.roboto(
                             fontSize: 10,
                             color: Colors.blue.shade900,
@@ -426,7 +434,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
                     Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      '${_capturedImages.length} image(s) ready',
+                      '${_capturedImages.length} ${AppStrings.get('cropLoss', 'images_ready', lang)}',
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -495,7 +503,9 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
               }
             },
             icon: const Icon(Icons.camera_alt),
-            label: Text(_capturedImages.isEmpty ? 'Capture Multiple Photos' : 'Update Photos'),
+            label: Text(_capturedImages.isEmpty 
+                ? AppStrings.get('cropLoss', 'capture_multiple', lang) 
+                : AppStrings.get('cropLoss', 'update_photos', lang)),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green.shade700,
               foregroundColor: Colors.white,
@@ -580,7 +590,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
     );
   }
 
-  Widget _buildDateField() {
+  Widget _buildDateField(String lang) {
     return InkWell(
       onTap: () async {
         final DateTime? picked = await showDatePicker(
@@ -597,7 +607,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
       },
       child: InputDecorator(
         decoration: InputDecoration(
-          labelText: 'Incident Date *',
+          labelText: '${AppStrings.get('cropLoss', 'incident_date', lang)} *',
           prefixIcon: Icon(Icons.calendar_today, color: Colors.red.shade700),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -610,7 +620,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
         child: Text(
           _incidentDate != null
               ? DateFormat('dd MMM yyyy').format(_incidentDate!)
-              : 'Select incident date',
+              : AppStrings.get('cropLoss', 'select_incident_date', lang),
           style: TextStyle(
             color: _incidentDate != null ? Colors.black87 : Colors.grey.shade600,
           ),
@@ -619,7 +629,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
     );
   }
 
-  Widget _buildLocationCard() {
+  Widget _buildLocationCard(String lang) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -636,7 +646,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'GPS Location',
+                  AppStrings.get('cropLoss', 'gps_location', lang),
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -648,7 +658,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
                   _currentPosition != null
                       ? 'Lat: ${_currentPosition!.latitude.toStringAsFixed(4)}, '
                         'Long: ${_currentPosition!.longitude.toStringAsFixed(4)}'
-                      : 'Fetching location...',
+                      : AppStrings.get('cropLoss', 'fetching_location', lang),
                   style: GoogleFonts.roboto(
                     fontSize: 11,
                     color: Colors.grey.shade700,
@@ -667,7 +677,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
     );
   }
 
-  void _submitReport() {
+  void _submitReport(String lang) {
     if (_formKey.currentState!.validate()) {
       if (_incidentDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -695,7 +705,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
               Icon(Icons.check_circle, color: Colors.green.shade700, size: 60),
               const SizedBox(height: 16),
               Text(
-                'Report Submitted!',
+                AppStrings.get('cropLoss', 'report_submitted', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -703,7 +713,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Your crop loss report has been successfully submitted. You will receive a confirmation SMS shortly.',
+                AppStrings.get('cropLoss', 'report_success_message', lang),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.roboto(fontSize: 14),
               ),
@@ -730,7 +740,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
                 Navigator.pop(context);
                 context.go('/crop-loss-intimation');
               },
-              child: const Text('View My Reports'),
+              child: Text(AppStrings.get('cropLoss', 'view_my_reports', lang)),
             ),
             ElevatedButton(
               onPressed: () {
@@ -740,7 +750,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade700,
               ),
-              child: const Text('Done'),
+              child: Text(AppStrings.get('common', 'done', lang)),
             ),
           ],
         ),
@@ -748,7 +758,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
     }
   }
 
-  void _showHelpDialog() {
+  void _showHelpDialog(String lang) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -757,7 +767,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
           children: [
             Icon(Icons.support_agent, color: Colors.blue.shade700),
             const SizedBox(width: 12),
-            const Text('Need Help?'),
+            Text(AppStrings.get('cropLoss', 'need_help', lang)),
           ],
         ),
         content: Column(
@@ -765,14 +775,14 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Contact customer support for assistance:',
+              AppStrings.get('cropLoss', 'contact_support', lang),
               style: GoogleFonts.roboto(fontSize: 14),
             ),
             const SizedBox(height: 16),
             ListTile(
               leading: const Icon(Icons.phone, color: Colors.blue),
               title: const Text('Call 14447'),
-              subtitle: const Text('Toll-Free Helpline'),
+              subtitle: Text(AppStrings.get('cropLoss', 'toll_free_helpline', lang)),
               onTap: () {
                 Navigator.pop(context);
               },
@@ -780,7 +790,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
             ListTile(
               leading: const Icon(Icons.chat, color: Colors.green),
               title: const Text('WhatsApp: 7065514447'),
-              subtitle: const Text('Chat Support'),
+              subtitle: Text(AppStrings.get('cropLoss', 'chat_support', lang)),
               onTap: () {
                 Navigator.pop(context);
               },
@@ -790,7 +800,7 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(AppStrings.get('common', 'close', lang)),
           ),
         ],
       ),

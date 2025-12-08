@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import '../../providers/language_provider.dart';
 import '../../localization/app_localizations.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../../services/weather_service.dart';
 
 enum OfficerLevel {
   national,
@@ -27,11 +29,22 @@ class OfficerDashboardScreen extends StatefulWidget {
 
 class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
   int _selectedIndex = 0;
+
   OfficerLevel _officerLevel = OfficerLevel.district; // Demo: District officer
   String _selectedState = 'Punjab';
   String _selectedDistrict = 'Ludhiana';
+
+  // From master branch → keep for location services
   String? _currentLocation;
   bool _isLoadingLocation = true;
+  
+  // Weather data
+  Map<String, dynamic>? _weatherData;
+  bool _isLoadingWeather = true;
+  final WeatherService _weatherService = WeatherService();
+
+  // From other branch → keep filter option
+  String _selectedClaimFilter = 'all'; // all, pending, approved, rejected
 
   // Demo statistics data
   final Map<String, dynamic> _stats = {
@@ -79,10 +92,60 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     },
   ];
 
+  Future<bool> _showExitConfirmationDialog() async {
+    final lang = context.read<LanguageProvider>().currentLanguage;
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          lang == 'hi' ? 'ऐप बंद करें?' : 'Exit App?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          lang == 'hi' 
+              ? 'क्या आप वाकई ऐप से बाहर निकलना चाहते हैं?' 
+              : 'Are you sure you want to exit the app?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(lang == 'hi' ? 'नहीं' : 'No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(lang == 'hi' ? 'हाँ, बाहर निकलें' : 'Yes, Exit'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
+    _fetchWeatherData();
+  }
+  
+  Future<void> _fetchWeatherData() async {
+    setState(() => _isLoadingWeather = true);
+    
+    try {
+      final weatherData = await _weatherService.getWeatherForCurrentLocation();
+      
+      if (mounted) {
+        setState(() {
+          _weatherData = weatherData;
+          _isLoadingWeather = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching weather: $e');
+      if (mounted) {
+        setState(() => _isLoadingWeather = false);
+      }
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -172,52 +235,62 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     return Consumer<LanguageProvider>(
       builder: (context, languageProvider, child) {
         final List<Widget> screens = [
-          _buildOverviewScreen(),
+          _buildOverviewScreen(languageProvider),
           _buildClaimsManagementScreen(),
           _buildAnalyticsScreen(),
           _buildReportsScreen(),
           const EnhancedSatelliteScreen(),
         ];
 
-        return Scaffold(
-          body: screens[_selectedIndex],
-          bottomNavigationBar: BottomNavigationBar(
-            type: BottomNavigationBarType.fixed,
-            currentIndex: _selectedIndex,
-            selectedItemColor: Colors.indigo.shade700,
-            unselectedItemColor: Colors.grey,
-            showUnselectedLabels: true,
-            onTap: (index) => setState(() => _selectedIndex = index),
-            items: [
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.dashboard),
-                label: AppStrings.get('navigation', 'overview', languageProvider.currentLanguage),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.assignment),
-                label: AppStrings.get('navigation', 'claims', languageProvider.currentLanguage),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.analytics),
-                label: AppStrings.get('navigation', 'analytics', languageProvider.currentLanguage),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.assessment),
-                label: AppStrings.get('navigation', 'reports', languageProvider.currentLanguage),
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.satellite_outlined),
-                activeIcon: const Icon(Icons.satellite),
-                label: AppStrings.get('navigation', 'satellite', languageProvider.currentLanguage),
-              ),
-            ],
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) async {
+            if (didPop) return;
+            final shouldExit = await _showExitConfirmationDialog();
+            if (shouldExit && mounted) {
+              SystemNavigator.pop();
+            }
+          },
+          child: Scaffold(
+            body: screens[_selectedIndex],
+            bottomNavigationBar: BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: _selectedIndex,
+              selectedItemColor: Colors.indigo.shade700,
+              unselectedItemColor: Colors.grey,
+              showUnselectedLabels: true,
+              onTap: (index) => setState(() => _selectedIndex = index),
+              items: [
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.dashboard),
+                  label: AppStrings.get('navigation', 'overview', languageProvider.currentLanguage),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.assignment),
+                  label: AppStrings.get('navigation', 'claims', languageProvider.currentLanguage),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.analytics),
+                  label: AppStrings.get('navigation', 'analytics', languageProvider.currentLanguage),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.assessment),
+                  label: AppStrings.get('navigation', 'reports', languageProvider.currentLanguage),
+                ),
+                BottomNavigationBarItem(
+                  icon: const Icon(Icons.satellite_outlined),
+                  activeIcon: const Icon(Icons.satellite),
+                  label: AppStrings.get('navigation', 'satellite', languageProvider.currentLanguage),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildOverviewScreen() {
+  Widget _buildOverviewScreen(LanguageProvider languageProvider) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -289,7 +362,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Officer Dashboard',
+                      AppStrings.get('officer', 'officer_dashboard', languageProvider.currentLanguage),
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -297,7 +370,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       ),
                     ),
                     Text(
-                      _getOfficerLevelText(),
+                      _getOfficerLevelText(languageProvider.currentLanguage),
                       style: GoogleFonts.roboto(
                         fontSize: 11,
                         color: Colors.white.withOpacity(0.9),
@@ -389,7 +462,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Key Metrics',
+                      AppStrings.get('dashboard', 'key_metrics', languageProvider.currentLanguage),
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -403,31 +476,31 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.3,
+                      childAspectRatio: 1.2,
                       children: [
                         _buildStatCard(
-                          'Total Claims',
+                          AppStrings.get('officer', 'total_claims', languageProvider.currentLanguage),
                           _stats['total_claims'].toString(),
                           Icons.assignment,
                           Colors.blue,
                           '+12% from last month',
                         ),
                         _buildStatCard(
-                          'Pending Claims',
+                          AppStrings.get('officer', 'pending_claims', languageProvider.currentLanguage),
                           _stats['pending_claims'].toString(),
                           Icons.pending_actions,
                           Colors.orange,
                           'Requires attention',
                         ),
                         _buildStatCard(
-                          'Active Farmers',
+                          AppStrings.get('officer', 'active_farmers', languageProvider.currentLanguage),
                           _stats['total_farmers'].toString(),
                           Icons.people,
                           Colors.green,
                           '${_stats['active_policies']} policies',
                         ),
                         _buildStatCard(
-                          'Approval Rate',
+                          AppStrings.get('officer', 'approval_rate', languageProvider.currentLanguage),
                           '${_stats['approval_rate']}%',
                           Icons.check_circle,
                           Colors.purple,
@@ -448,7 +521,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Environmental Monitoring',
+                      AppStrings.get('officer', 'environmental_monitoring', languageProvider.currentLanguage),
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -459,11 +532,11 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildWeatherPlaceholder(),
+                          child: _buildWeatherPlaceholder(languageProvider.currentLanguage),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _buildSatellitePlaceholder(),
+                          child: _buildSatellitePlaceholder(languageProvider.currentLanguage),
                         ),
                       ],
                     ),
@@ -483,7 +556,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Recent Claims',
+                          AppStrings.get('officer', 'recent_claims', languageProvider.currentLanguage),
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -492,12 +565,12 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                         ),
                         TextButton(
                           onPressed: () => setState(() => _selectedIndex = 1),
-                          child: const Text('View All'),
+                          child: Text(AppStrings.get('officer', 'view_all', languageProvider.currentLanguage)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    ..._recentClaims.take(3).map((claim) => _buildClaimCard(claim)),
+                    ..._recentClaims.take(3).map((claim) => _buildClaimCard(claim, languageProvider.currentLanguage)),
                   ],
                 ),
               ),
@@ -511,7 +584,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Quick Actions',
+                      AppStrings.get('officer', 'quick_actions', languageProvider.currentLanguage),
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -523,7 +596,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       children: [
                         Expanded(
                           child: _buildActionButton(
-                            'Review Claims',
+                            AppStrings.get('officer', 'review_claims', languageProvider.currentLanguage),
                             Icons.rate_review,
                             Colors.blue,
                             () => setState(() => _selectedIndex = 1),
@@ -532,7 +605,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _buildActionButton(
-                            'View Analytics',
+                            AppStrings.get('officer', 'view_analytics', languageProvider.currentLanguage),
                             Icons.bar_chart,
                             Colors.purple,
                             () => setState(() => _selectedIndex = 2),
@@ -545,7 +618,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       children: [
                         Expanded(
                           child: _buildActionButton(
-                            'Export Report',
+                            AppStrings.get('officer', 'export_report', languageProvider.currentLanguage),
                             Icons.file_download,
                             Colors.green,
                             () {},
@@ -554,7 +627,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _buildActionButton(
-                            'Field Inspection',
+                            AppStrings.get('officer', 'field_inspection', languageProvider.currentLanguage),
                             Icons.location_searching,
                             Colors.orange,
                             () {},
@@ -567,7 +640,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                       children: [
                         Expanded(
                           child: _buildActionButton(
-                            'Change Language',
+                            AppStrings.get('actions', 'change_language', languageProvider.currentLanguage),
                             Icons.language,
                             Colors.indigo,
                             () {
@@ -582,7 +655,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _buildActionButton(
-                            'Settings',
+                            AppStrings.get('officer', 'settings', languageProvider.currentLanguage),
                             Icons.settings,
                             Colors.teal,
                             () {},
@@ -601,62 +674,103 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
   }
 
   Widget _buildClaimsManagementScreen() {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Claims Management',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) => Scaffold(
+        appBar: AppBar(
+          title: Text(
+            AppStrings.get('officer', 'claims_management', languageProvider.currentLanguage),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: Colors.indigo.shade700,
+          foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.filter_list),
+              onPressed: _showFilterDialog,
+            ),
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {},
+            ),
+          ],
         ),
-        backgroundColor: Colors.indigo.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: Column(
+        body: Column(
         children: [
           // Filter Tabs
           Container(
             color: Colors.grey.shade100,
             child: Row(
               children: [
-                _buildFilterChip('All', _stats['total_claims']),
-                _buildFilterChip('Pending', _stats['pending_claims']),
-                _buildFilterChip('Approved', _stats['approved_claims']),
-                _buildFilterChip('Rejected', _stats['rejected_claims']),
+                _buildFilterChip(AppStrings.get('officer', 'all_claims', languageProvider.currentLanguage), _stats['total_claims'], 'all'),
+                _buildFilterChip(AppStrings.get('status', 'pending', languageProvider.currentLanguage), _stats['pending_claims'], 'pending'),
+                _buildFilterChip(AppStrings.get('claims', 'approved_claims', languageProvider.currentLanguage), _stats['approved_claims'], 'approved'),
+                _buildFilterChip(AppStrings.get('officer', 'rejected', languageProvider.currentLanguage), _stats['rejected_claims'], 'rejected'),
               ],
             ),
           ),
 
           // Claims List
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _recentClaims.length,
-              itemBuilder: (context, index) {
-                return _buildDetailedClaimCard(_recentClaims[index]);
+            child: Builder(
+              builder: (context) {
+                // Filter claims based on selected filter
+                final filteredClaims = _selectedClaimFilter == 'all'
+                    ? _recentClaims
+                    : _recentClaims.where((claim) {
+                        final status = claim['status'] as String;
+                        if (_selectedClaimFilter == 'pending') {
+                          return status == 'pending' || status == 'under_review';
+                        } else if (_selectedClaimFilter == 'approved') {
+                          return status == 'approved';
+                        } else if (_selectedClaimFilter == 'rejected') {
+                          return status == 'rejected';
+                        }
+                        return true;
+                      }).toList();
+
+                if (filteredClaims.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inbox, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          AppStrings.get('claims', 'no_claims_found', languageProvider.currentLanguage),
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredClaims.length,
+                  itemBuilder: (context, index) {
+                    return _buildDetailedClaimCard(filteredClaims[index], languageProvider.currentLanguage);
+                  },
+                );
               },
             ),
           ),
         ],
       ),
+      ),
     );
   }
 
   Widget _buildAnalyticsScreen() {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Analytics Dashboard',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) => Scaffold(
+        appBar: AppBar(
+          title: Text(
+            AppStrings.get('officer', 'analytics_dashboard', languageProvider.currentLanguage),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
         backgroundColor: Colors.indigo.shade700,
         foregroundColor: Colors.white,
       ),
@@ -669,24 +783,24 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
             Row(
               children: [
                 Text(
-                  'Period: ',
+                  AppStrings.get('officer', 'period', languageProvider.currentLanguage),
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Week'),
+                  label: Text(AppStrings.get('officer', 'week', languageProvider.currentLanguage)),
                   selected: true,
                   onSelected: (selected) {},
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Month'),
+                  label: Text(AppStrings.get('officer', 'month', languageProvider.currentLanguage)),
                   selected: false,
                   onSelected: (selected) {},
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Year'),
+                  label: Text(AppStrings.get('officer', 'year', languageProvider.currentLanguage)),
                   selected: false,
                   onSelected: (selected) {},
                 ),
@@ -710,14 +824,14 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                     Icon(Icons.show_chart, size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 8),
                     Text(
-                      'Claims Trend Chart',
+                      AppStrings.get('officer', 'claims_trend_chart', languageProvider.currentLanguage),
                       style: GoogleFonts.poppins(
                         color: Colors.grey.shade600,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      'Chart library integration pending',
+                      AppStrings.get('officer', 'chart_integration_pending', languageProvider.currentLanguage),
                       style: GoogleFonts.roboto(
                         fontSize: 12,
                         color: Colors.grey.shade500,
@@ -732,7 +846,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
 
             // Crop-wise Distribution
             Text(
-              'Crop-wise Claims Distribution',
+              AppStrings.get('officer', 'crop_distribution', languageProvider.currentLanguage),
               style: GoogleFonts.poppins(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -749,7 +863,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
 
             // Performance Metrics
             Text(
-              'Performance Metrics',
+              AppStrings.get('officer', 'performance_metrics', languageProvider.currentLanguage),
               style: GoogleFonts.poppins(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -760,8 +874,8 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               children: [
                 Expanded(
                   child: _buildMetricCard(
-                    'Avg. Processing Time',
-                    '${_stats['avg_claim_time']} days',
+                    AppStrings.get('officer', 'avg_processing_time', languageProvider.currentLanguage),
+                    '${_stats['avg_claim_time']} ${AppStrings.get('officer', 'days', languageProvider.currentLanguage)}',
                     Icons.timer,
                     Colors.blue,
                   ),
@@ -769,7 +883,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildMetricCard(
-                    'Total Payout',
+                    AppStrings.get('officer', 'total_payout', languageProvider.currentLanguage),
                     '₹${(_stats['total_payout'] / 10000000).toStringAsFixed(1)}Cr',
                     Icons.currency_rupee,
                     Colors.green,
@@ -780,53 +894,56 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
   Widget _buildReportsScreen() {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Reports & Export',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) => Scaffold(
+        appBar: AppBar(
+          title: Text(
+            AppStrings.get('officer', 'reports_export', languageProvider.currentLanguage),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: Colors.indigo.shade700,
+          foregroundColor: Colors.white,
         ),
-        backgroundColor: Colors.indigo.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           _buildReportCard(
-            'Monthly Claims Report',
-            'Complete claims data for the month',
+            AppStrings.get('officer', 'monthly_claims_report', languageProvider.currentLanguage),
+            AppStrings.get('officer', 'detailed_claims_summary', languageProvider.currentLanguage),
             Icons.calendar_month,
             Colors.blue,
           ),
           _buildReportCard(
-            'Financial Summary',
-            'Premium and payout statistics',
+            AppStrings.get('officer', 'financial_summary', languageProvider.currentLanguage),
+            AppStrings.get('officer', 'budget_disbursement', languageProvider.currentLanguage),
             Icons.account_balance,
             Colors.green,
           ),
           _buildReportCard(
-            'Farmer Database',
-            'Complete farmer registry',
+            AppStrings.get('officer', 'farmer_database', languageProvider.currentLanguage),
+            AppStrings.get('officer', 'registered_farmers', languageProvider.currentLanguage),
             Icons.people,
             Colors.orange,
           ),
           _buildReportCard(
-            'Crop Loss Analysis',
-            'Detailed loss assessment reports',
+            AppStrings.get('officer', 'crop_loss_analysis', languageProvider.currentLanguage),
+            AppStrings.get('officer', 'loss_patterns_weather', languageProvider.currentLanguage),
             Icons.agriculture,
             Colors.red,
           ),
           _buildReportCard(
-            'Performance Dashboard',
-            'Officer and department metrics',
+            AppStrings.get('officer', 'performance_dashboard', languageProvider.currentLanguage),
+            AppStrings.get('officer', 'team_kpi_tracking', languageProvider.currentLanguage),
             Icons.assessment,
             Colors.purple,
           ),
         ],
+      ),
       ),
     );
   }
@@ -835,7 +952,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color, String subtitle) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -860,48 +977,110 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 20),
               ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade800,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                title,
-                style: GoogleFonts.roboto(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  style: GoogleFonts.roboto(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: GoogleFonts.roboto(
-                  fontSize: 10,
-                  color: color,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.roboto(
+                    fontSize: 9,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWeatherPlaceholder() {
+  Widget _buildWeatherPlaceholder(String lang) {
+    if (_isLoadingWeather) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade400, Colors.blue.shade600],
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+
+    if (_weatherData == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade400, Colors.blue.shade600],
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.cloud_off, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  AppStrings.get('officer', 'weather_api', lang),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Unable to load weather data',
+              style: GoogleFonts.roboto(
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Display actual weather data
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -909,46 +1088,124 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
           colors: [Colors.blue.shade400, Colors.blue.shade600],
         ),
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.cloud, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Weather API',
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+              Row(
+                children: [
+                  Icon(Icons.location_on, color: Colors.white, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    _weatherData!['location'] ?? 'Unknown',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: Icon(Icons.refresh, color: Colors.white, size: 20),
+                onPressed: _fetchWeatherData,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            'Integration Pending',
-            style: GoogleFonts.roboto(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Real-time weather data',
-            style: GoogleFonts.roboto(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 10,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_weatherData!['temp']}°',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          WeatherService.getWeatherIconLocal(_weatherData!['main']),
+                          style: TextStyle(fontSize: 32),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    _weatherData!['description'].toString().toUpperCase(),
+                    style: GoogleFonts.roboto(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _buildWeatherDetail(
+                    Icons.water_drop,
+                    '${_weatherData!['humidity']}%',
+                  ),
+                  const SizedBox(height: 4),
+                  _buildWeatherDetail(
+                    Icons.air,
+                    '${_weatherData!['wind_speed']} km/h',
+                  ),
+                  const SizedBox(height: 4),
+                  _buildWeatherDetail(
+                    Icons.thermostat,
+                    '${_weatherData!['feels_like']}°C',
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSatellitePlaceholder() {
+  Widget _buildWeatherDetail(IconData icon, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white.withOpacity(0.8), size: 16),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: GoogleFonts.roboto(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSatellitePlaceholder(String lang) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -965,7 +1222,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               Icon(Icons.satellite_alt, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Satellite API',
+                AppStrings.get('officer', 'satellite_api', lang),
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -976,7 +1233,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Integration Pending',
+            AppStrings.get('officer', 'integration_pending', lang),
             style: GoogleFonts.roboto(
               color: Colors.white.withOpacity(0.9),
               fontSize: 12,
@@ -984,7 +1241,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Crop monitoring data',
+            AppStrings.get('officer', 'crop_monitoring_data', lang),
             style: GoogleFonts.roboto(
               color: Colors.white.withOpacity(0.7),
               fontSize: 10,
@@ -995,7 +1252,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     );
   }
 
-  Widget _buildClaimCard(Map<String, dynamic> claim) {
+  Widget _buildClaimCard(Map<String, dynamic> claim, String lang) {
     Color statusColor = _getStatusColor(claim['status']);
     
     return Card(
@@ -1029,7 +1286,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
             border: Border.all(color: statusColor),
           ),
           child: Text(
-            _getStatusLabel(claim['status']),
+            _getStatusLabel(claim['status'], lang),
             style: GoogleFonts.roboto(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -1042,7 +1299,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     );
   }
 
-  Widget _buildDetailedClaimCard(Map<String, dynamic> claim) {
+  Widget _buildDetailedClaimCard(Map<String, dynamic> claim, String lang) {
     Color statusColor = _getStatusColor(claim['status']);
     
     return Card(
@@ -1071,7 +1328,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                     border: Border.all(color: statusColor),
                   ),
                   child: Text(
-                    _getStatusLabel(claim['status']),
+                    _getStatusLabel(claim['status'], lang),
                     style: GoogleFonts.roboto(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1100,7 +1357,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               children: [
                 Icon(Icons.agriculture, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
-                Text('Crop: ${claim['crop']}', style: GoogleFonts.roboto(fontSize: 13)),
+                Text('${AppStrings.get('officer', 'crop', lang)} ${claim['crop']}', style: GoogleFonts.roboto(fontSize: 13)),
                 const SizedBox(width: 16),
                 Icon(Icons.currency_rupee, size: 14, color: Colors.grey.shade600),
                 Text('₹${claim['amount']}', style: GoogleFonts.roboto(fontSize: 13)),
@@ -1128,7 +1385,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => _showClaimDetails(claim),
                     icon: const Icon(Icons.visibility, size: 16),
-                    label: const Text('View Details'),
+                    label: Text(AppStrings.get('officer', 'view_details', lang)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
@@ -1139,7 +1396,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () {},
                     icon: const Icon(Icons.rate_review, size: 16),
-                    label: const Text('Review'),
+                    label: Text(AppStrings.get('officer', 'review', lang)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.indigo.shade700,
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1170,14 +1427,18 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     );
   }
 
-  Widget _buildFilterChip(String label, int count) {
+  Widget _buildFilterChip(String label, int count, String filterValue) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.all(4),
         child: FilterChip(
-          label: Text('$label ($count)'),
-          selected: false,
-          onSelected: (selected) {},
+          label: Text('$label ($count)', style: TextStyle(fontSize: 11)),
+          selected: _selectedClaimFilter == filterValue,
+          onSelected: (selected) {
+            setState(() {
+              _selectedClaimFilter = filterValue;
+            });
+          },
         ),
       ),
     );
@@ -1324,14 +1585,14 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
 
   // Helper Methods
 
-  String _getOfficerLevelText() {
+  String _getOfficerLevelText(String lang) {
     switch (_officerLevel) {
       case OfficerLevel.national:
-        return 'National Level Officer';
+        return AppStrings.get('officer', 'national_level_officer', lang);
       case OfficerLevel.state:
-        return 'State Level Officer';
+        return AppStrings.get('officer', 'state_level_officer', lang);
       case OfficerLevel.district:
-        return 'District Level Officer';
+        return AppStrings.get('officer', 'district_level_officer', lang);
     }
   }
 
@@ -1361,32 +1622,33 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     }
   }
 
-  String _getStatusLabel(String status) {
+  String _getStatusLabel(String status, String lang) {
     switch (status) {
       case 'pending':
-        return 'Pending';
+        return AppStrings.get('status', 'pending', lang);
       case 'approved':
-        return 'Approved';
+        return AppStrings.get('claims', 'approved_claims', lang);
       case 'rejected':
-        return 'Rejected';
+        return AppStrings.get('officer', 'rejected', lang);
       case 'under_review':
-        return 'Under Review';
+        return AppStrings.get('officer', 'under_review', lang);
       default:
-        return 'Unknown';
+        return status;
     }
   }
 
   void _showLevelSelector() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Officer Level'),
+        title: Text(AppStrings.get('officer', 'select_officer_level', lang)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             RadioListTile<OfficerLevel>(
-              title: const Text('National Level'),
-              subtitle: const Text('View all India data'),
+              title: Text(AppStrings.get('officer', 'national_level_officer', lang)),
+              subtitle: Text(lang == 'hi' ? 'अखिल भारतीय डेटा देखें' : 'View all India data'),
               value: OfficerLevel.national,
               groupValue: _officerLevel,
               onChanged: (value) {
@@ -1395,8 +1657,8 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               },
             ),
             RadioListTile<OfficerLevel>(
-              title: const Text('State Level'),
-              subtitle: const Text('View state-specific data'),
+              title: Text(AppStrings.get('officer', 'state_level_officer', lang)),
+              subtitle: Text(lang == 'hi' ? 'राज्य-विशिष्ट डेटा देखें' : 'View state-specific data'),
               value: OfficerLevel.state,
               groupValue: _officerLevel,
               onChanged: (value) {
@@ -1405,8 +1667,8 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               },
             ),
             RadioListTile<OfficerLevel>(
-              title: const Text('District Level'),
-              subtitle: const Text('View district-specific data'),
+              title: Text(AppStrings.get('officer', 'district_level_officer', lang)),
+              subtitle: Text(lang == 'hi' ? 'जिला-विशिष्ट डेटा देखें' : 'View district-specific data'),
               value: OfficerLevel.district,
               groupValue: _officerLevel,
               onChanged: (value) {
@@ -1421,27 +1683,28 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
   }
 
   void _showFilterDialog() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filter Claims'),
+        title: Text(AppStrings.get('officer', 'filter_claims', lang)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: const Text('All Claims'),
+              title: Text(AppStrings.get('officer', 'all_claims', lang)),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              title: const Text('Pending Only'),
+              title: Text('${AppStrings.get('status', 'pending', lang)} ${lang == 'hi' ? 'केवल' : 'Only'}'),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              title: const Text('Approved Only'),
+              title: Text('${AppStrings.get('claims', 'approved_claims', lang)} ${lang == 'hi' ? 'केवल' : 'Only'}'),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              title: const Text('Rejected Only'),
+              title: Text('${AppStrings.get('officer', 'rejected', lang)} ${lang == 'hi' ? 'केवल' : 'Only'}'),
               onTap: () => Navigator.pop(context),
             ),
           ],
@@ -1451,6 +1714,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
   }
 
   void _showClaimDetails(Map<String, dynamic> claim) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1480,20 +1744,20 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               ),
               const SizedBox(height: 20),
               Text(
-                'Claim Details',
+                AppStrings.get('claims', 'claim_details', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Claim ID: ${claim['id']}', style: GoogleFonts.roboto()),
-              Text('Farmer: ${claim['farmer']}', style: GoogleFonts.roboto()),
-              Text('Crop: ${claim['crop']}', style: GoogleFonts.roboto()),
-              Text('Amount: ₹${claim['amount']}', style: GoogleFonts.roboto()),
-              Text('District: ${claim['district']}', style: GoogleFonts.roboto()),
+              Text('${lang == 'hi' ? 'दावा आईडी' : 'Claim ID'}: ${claim['id']}', style: GoogleFonts.roboto()),
+              Text('${lang == 'hi' ? 'किसान' : 'Farmer'}: ${claim['farmer']}', style: GoogleFonts.roboto()),
+              Text('${lang == 'hi' ? 'फसल' : 'Crop'}: ${claim['crop']}', style: GoogleFonts.roboto()),
+              Text('${lang == 'hi' ? 'राशि' : 'Amount'}: ₹${claim['amount']}', style: GoogleFonts.roboto()),
+              Text('${lang == 'hi' ? 'जिला' : 'District'}: ${claim['district']}', style: GoogleFonts.roboto()),
               Text(
-                'Date: ${DateFormat('dd MMM yyyy').format(claim['date'])}',
+                '${lang == 'hi' ? 'तारीख' : 'Date'}: ${DateFormat('dd MMM yyyy').format(claim['date'])}',
                 style: GoogleFonts.roboto(),
               ),
               const SizedBox(height: 24),
@@ -1503,7 +1767,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                   minimumSize: const Size(double.infinity, 48),
                   backgroundColor: Colors.indigo.shade700,
                 ),
-                child: const Text('Close'),
+                child: Text(AppStrings.get('premium', 'close', lang)),
               ),
             ],
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +17,7 @@ import '../../satellite/enhanced_satellite_screen.dart';
 import '../../settings/language_settings_screen.dart';
 import '../../../providers/language_provider.dart';
 import '../../../localization/app_localizations.dart';
+import 'dart:ui';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -30,10 +32,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   int _pendingUploadsCount = 0;
   final LocalStorageService _localStorageService = LocalStorageService();
+  final ScrollController _scrollController = ScrollController();
+  double _scrollOffset = 0.0;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(() {
+      setState(() {
+        _scrollOffset = _scrollController.offset;
+      });
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserProfile();
       _loadPendingUploads();
@@ -49,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     final autoSyncService = context.read<AutoSyncService>();
     autoSyncService.stopPeriodicSync();
     super.dispose();
@@ -99,6 +109,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<bool> _showExitConfirmationDialog() async {
+    final lang = context.read<LanguageProvider>().currentLanguage;
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          lang == 'hi' ? 'ऐप बंद करें?' : 'Exit App?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          lang == 'hi' 
+              ? 'क्या आप वाकई ऐप से बाहर निकलना चाहते हैं?' 
+              : 'Are you sure you want to exit the app?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(lang == 'hi' ? 'नहीं' : 'No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(lang == 'hi' ? 'हाँ, बाहर निकलें' : 'Yes, Exit'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<LanguageProvider>(
@@ -110,39 +149,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const ProfileScreen(),
         ];
 
-        return Scaffold(
-          body: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : screens[_selectedIndex],
-          floatingActionButton: _selectedIndex == 0
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Customer Support FAB
-                FloatingActionButton(
-                  heroTag: 'support',
-                  onPressed: _showHelpDialog,
-                  backgroundColor: Colors.blue.shade700,
-                  child: const Icon(Icons.support_agent, size: 28),
-                ),
-                const SizedBox(height: 12),
-                // Camera FAB
-                FloatingActionButton.extended(
-                  heroTag: 'camera',
-                  onPressed: () => context.push('/camera'),
-                  label: const Text('Capture Image'),
-                  icon: const Icon(Icons.camera_alt_rounded),
-                  backgroundColor: Colors.green.shade700,
-                ),
-              ],
-            )
-          : null,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) async {
+            if (didPop) return;
+            final shouldExit = await _showExitConfirmationDialog();
+            if (shouldExit && mounted) {
+              SystemNavigator.pop();
+            }
+          },
+          child: Scaffold(
+            body: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : screens[_selectedIndex],
+            floatingActionButton: _selectedIndex == 0
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Customer Support FAB
+                  FloatingActionButton(
+                    heroTag: 'support',
+                    onPressed: _showHelpDialog,
+                    backgroundColor: Colors.blue.shade700,
+                    child: const Icon(Icons.support_agent, size: 28),
+                  ),
+                  const SizedBox(height: 12),
+                  // AR Camera FAB (NEW)
+                  FloatingActionButton(
+                    heroTag: 'ar_camera',
+                    onPressed: () => context.push('/ar-camera', extra: {
+                      'multiAngleMode': true,
+                      'purpose': 'crop_inspection',
+                    }),
+                    backgroundColor: Colors.purple.shade700,
+                    child: const Icon(Icons.view_in_ar, size: 28),
+                  ),
+                  const SizedBox(height: 12),
+                  // Camera FAB
+                  FloatingActionButton.extended(
+                    heroTag: 'camera',
+                    onPressed: () => context.push('/camera'),
+                    label: const Text('Capture Image'),
+                    icon: const Icon(Icons.camera_alt_rounded),
+                    backgroundColor: Colors.green.shade700,
+                  ),
+                ],
+              )
+            : null,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
               offset: const Offset(0, -2),
             ),
           ],
@@ -181,16 +240,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
+        ),
         );
       },
     );
   }
 
   Widget _buildHomeScreen() {
+    // Calculate blur intensity based on scroll (0 to 10)
+    double blurIntensity = (_scrollOffset / 50).clamp(0.0, 10.0);
+    // Calculate opacity for fade effect
+    double opacity = (1.0 - (_scrollOffset / 100)).clamp(0.0, 1.0);
+    
     return Container(
       color: const Color(0xFFFAFAFA),
       child: SafeArea(
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // App Bar
             SliverAppBar(
@@ -258,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     Text(
-                      'प्रधानमंत्री फसल बीमा योजना',
+                      AppStrings.get('pmfbyInfo', 'scheme_name', context.read<LanguageProvider>().currentLanguage),
                       style: GoogleFonts.notoSansDevanagari(
                         fontSize: 11,
                         color: Colors.white.withOpacity(0.95),
@@ -310,45 +376,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.verified_user,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
+                            // Apply blur and fade effect to welcome section
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(
+                                  sigmaX: blurIntensity,
+                                  sigmaY: blurIntensity,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                child: AnimatedOpacity(
+                                  opacity: opacity,
+                                  duration: const Duration(milliseconds: 50),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        'नमस्ते',
-                                        style: GoogleFonts.notoSansDevanagari(
-                                          fontSize: 16,
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontWeight: FontWeight.w400,
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                          Icons.verified_user,
+                                          color: Colors.white,
+                                          size: 28,
                                         ),
                                       ),
-                                      Text(
-                                        _userProfile?.name ?? "किसान भाई",
-                                        style: GoogleFonts.notoSans(
-                                          fontSize: 20,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              AppStrings.get('greetings', 'welcome', context.read<LanguageProvider>().currentLanguage),
+                                              style: GoogleFonts.notoSansDevanagari(
+                                                fontSize: 16,
+                                                color: Colors.white.withOpacity(0.9),
+                                                fontWeight: FontWeight.w400,
+                                              ),
+                                            ),
+                                            Text(
+                                              _userProfile?.name ?? "किसान भाई",
+                                              style: GoogleFonts.notoSans(
+                                                fontSize: 20,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
@@ -387,7 +467,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'ऑफलाइन मोड',
+                                    AppStrings.get('dashboard', 'offline_mode', context.read<LanguageProvider>().currentLanguage),
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
@@ -397,8 +477,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     _pendingUploadsCount > 0
-                                        ? '$_pendingUploadsCount फोटो सिंक के लिए बाकी'
-                                        : 'इंटरनेट से कनेक्ट होने पर डेटा सिंक होगा',
+                                        ? '$_pendingUploadsCount ${AppStrings.get('dashboard', 'photos_pending_sync', context.read<LanguageProvider>().currentLanguage)}'
+                                        : AppStrings.get('dashboard', 'data_will_sync', context.read<LanguageProvider>().currentLanguage),
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.95),
                                       fontSize: 12,
@@ -429,8 +509,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        '5.0 एकड़',
-                        'कुल भूमि',
+                        '5.0',
+                        AppStrings.get('dashboard', 'total_land', context.read<LanguageProvider>().currentLanguage),
                         Icons.landscape,
                         Colors.green,
                       ),
@@ -439,7 +519,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         '3',
-                        'फसलें',
+                        AppStrings.get('dashboard', 'crops', context.read<LanguageProvider>().currentLanguage),
                         Icons.eco,
                         Colors.orange,
                       ),
@@ -448,7 +528,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         '2',
-                        'सक्रिय दावे',
+                        AppStrings.get('dashboard', 'active_claims', context.read<LanguageProvider>().currentLanguage),
                         Icons.pending_actions,
                         Colors.blue,
                       ),
@@ -503,7 +583,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'फसल की फोटो लें',
+                                    AppStrings.get('dashboard', 'capture_crop_image', context.read<LanguageProvider>().currentLanguage),
                                     style: GoogleFonts.poppins(
                                       color: Colors.white,
                                       fontSize: 18,
@@ -511,7 +591,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                   Text(
-                                    'Capture Crop Image with GPS',
+                                    '${AppStrings.get('dashboard', 'capture_crop_image', 'en')} ${AppStrings.get('dashboard', 'capture_with_gps', 'en')}',
                                     style: GoogleFonts.roboto(
                                       color: Colors.white.withOpacity(0.9),
                                       fontSize: 12,
@@ -578,7 +658,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'योजना की जानकारी',
+                                AppStrings.get('dashboard', 'scheme_info', context.read<LanguageProvider>().currentLanguage),
                                 style: GoogleFonts.notoSansDevanagari(
                                   color: Colors.white,
                                   fontSize: 18,
@@ -587,7 +667,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'प्रीमियम दरें • हेल्पलाइन • सहायता',
+                                AppStrings.get('dashboard', 'premium_rates', context.read<LanguageProvider>().currentLanguage),
                                 style: GoogleFonts.notoSansDevanagari(
                                   color: Colors.white.withOpacity(0.9),
                                   fontSize: 13,
@@ -623,55 +703,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 1.1,
+                  childAspectRatio: 1.0,
                 ),
                 delegate: SliverChildListDelegate([
                   _buildActionCard(
-                    'नया दावा दर्ज करें',
-                    'File New Claim',
+                    AppStrings.get('actions', 'file_claim', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('actions', 'file_claim', 'en'),
                     Icons.add_circle_outline,
                     Colors.blue,
                     () => context.push('/file-claim'),
                   ),
                   _buildActionCard(
-                    'मेरे दावे',
-                    'My Claims',
+                    AppStrings.get('dashboard', 'my_claims', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'my_claims', 'en'),
                     Icons.history,
                     Colors.orange,
                     () => context.push('/claims'),
                   ),
                   _buildActionCard(
-                    'बीमा योजनाएं',
-                    'Insurance Schemes',
+                    AppStrings.get('dashboard', 'insurance_schemes', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'insurance_schemes', 'en'),
                     Icons.policy,
                     Colors.purple,
                     () => setState(() => _selectedIndex = 2),
                   ),
                   _buildActionCardWithBadge(
-                    'अपलोड स्टेटस',
-                    'Upload Status',
+                    AppStrings.get('dashboard', 'upload_status', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'upload_status', 'en'),
                     Icons.cloud_upload,
                     Colors.indigo,
                     () => context.push('/upload-status'),
                     _pendingUploadsCount,
                   ),
                   _buildActionCard(
-                    'फसल नुकसान सूचना',
-                    'Crop Loss Intimation',
+                    AppStrings.get('dashboard', 'crop_loss_intimation', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'crop_loss_intimation', 'en'),
                     Icons.report_problem,
                     Colors.red.shade700,
                     () => context.push('/crop-loss-intimation'),
                   ),
                   _buildActionCard(
-                    'प्रीमियम कैलकुलेटर',
-                    'Premium Calculator',
+                    AppStrings.get('dashboard', 'premium_calculator', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'premium_calculator', 'en'),
                     Icons.calculate_outlined,
                     Colors.green.shade600,
                     () => context.push('/premium-calculator'),
                   ),
                   _buildActionCard(
-                    'मदद केंद्र',
-                    'Help Center',
+                    AppStrings.get('dashboard', 'help_center', context.read<LanguageProvider>().currentLanguage),
+                    AppStrings.get('dashboard', 'help_center', 'en'),
                     Icons.help_outline,
                     Colors.teal,
                     () => _showHelpDialog(),
@@ -688,7 +768,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'हाल की गतिविधि (Recent Activity)',
+                      AppStrings.get('dashboard', 'recent_activity', context.read<LanguageProvider>().currentLanguage),
                       style: GoogleFonts.poppins(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -696,23 +776,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    _buildActivityTile(
-                      'फोटो अपलोड की गई',
-                      '2 घंटे पहले',
+                    _buildActivityButton(
+                      AppStrings.get('dashboard', 'photo_uploaded', context.read<LanguageProvider>().currentLanguage),
+                      '2 ${AppStrings.get('dashboard', 'hours_ago', context.read<LanguageProvider>().currentLanguage)}',
                       Icons.check_circle,
                       Colors.green,
+                      () => context.push('/upload-status'),
                     ),
-                    _buildActivityTile(
-                      'AI विश्लेषण पूर्ण',
-                      '3 घंटे पहले',
+                    _buildActivityButton(
+                      AppStrings.get('dashboard', 'ai_analysis_complete', context.read<LanguageProvider>().currentLanguage),
+                      '3 ${AppStrings.get('dashboard', 'hours_ago', context.read<LanguageProvider>().currentLanguage)}',
                       Icons.analytics,
                       Colors.blue,
+                      () => context.push('/satellite'),
                     ),
-                    _buildActivityTile(
-                      'दावा स्वीकृत',
-                      '1 दिन पहले',
+                    _buildActivityButton(
+                      AppStrings.get('dashboard', 'claim_approved', context.read<LanguageProvider>().currentLanguage),
+                      '1 ${AppStrings.get('dashboard', 'days_ago', context.read<LanguageProvider>().currentLanguage)}',
                       Icons.verified,
                       Colors.green,
+                      () {
+                        setState(() => _selectedIndex = 1); // Switch to Claims tab
+                      },
                     ),
                   ],
                 ),
@@ -937,53 +1022,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildActivityTile(
+  Widget _buildActivityButton(
     String title,
     String time,
     IconData icon,
     Color color,
+    VoidCallback onTap,
   ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  title,
-                  style: GoogleFonts.notoSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.notoSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey.shade400,
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -999,7 +1099,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'ग्राहक सहायता',
+                AppStrings.get('dashboard', 'customer_support', context.read<LanguageProvider>().currentLanguage),
                 style: GoogleFonts.poppins(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -1203,7 +1303,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              'बंद करें',
+              AppStrings.get('dashboard', 'close', context.read<LanguageProvider>().currentLanguage),
               style: GoogleFonts.poppins(
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.w600,

@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/image_upload_service.dart';
+import '../../providers/language_provider.dart';
+import '../../localization/app_localizations.dart';
 
 class MultiImageCaptureScreen extends StatefulWidget {
   final String? reportId;
@@ -29,189 +31,191 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Capture Farm Images (${_capturedImages.length}/${widget.maxImages})',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-        actions: [
-          if (_capturedImages.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.check),
-              onPressed: _confirmImages,
-              tooltip: 'Done',
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              '${AppStrings.get('camera', 'capture_farm_images', lang)} (${_capturedImages.length}/${widget.maxImages})',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Instructions Banner
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              border: Border(
-                bottom: BorderSide(color: Colors.blue.shade200),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            backgroundColor: Colors.green.shade700,
+            foregroundColor: Colors.white,
+            actions: [
+              if (_capturedImages.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.check),
+                  onPressed: () => _confirmImages(lang),
+                  tooltip: AppStrings.get('camera', 'done', lang),
+                ),
+            ],
+          ),
+          body: Column(
+            children: [
+              // Instructions Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.blue.shade200),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                    const SizedBox(width: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          AppStrings.get('camera', 'capture_multiple_angles', lang),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Text(
-                      'Capture Multiple Angles',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue.shade700,
+                      '${AppStrings.get('camera', 'multi_image_instructions', lang)}\n• ${AppStrings.get('camera', 'maximum_images_allowed', lang).replaceAll('{count}', '${widget.maxImages}')}',
+                      style: GoogleFonts.roboto(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        height: 1.5,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '• Take 4-5 clear photos from different angles\n'
-                  '• Include field boundaries and damage areas\n'
-                  '• Photos will be compressed automatically\n'
-                  '• Maximum ${widget.maxImages} images allowed',
-                  style: GoogleFonts.roboto(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
 
-          // Image Grid
-          Expanded(
-            child: _capturedImages.isEmpty
-                ? _buildEmptyState()
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1,
+              // Image Grid
+              Expanded(
+                child: _capturedImages.isEmpty
+                    ? _buildEmptyState(lang)
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1,
+                        ),
+                        itemCount: _capturedImages.length,
+                        itemBuilder: (context, index) {
+                          return _buildImageCard(_capturedImages[index], index);
+                        },
+                      ),
+              ),
+
+              // Action Buttons
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
                     ),
-                    itemCount: _capturedImages.length,
-                    itemBuilder: (context, index) {
-                      return _buildImageCard(_capturedImages[index], index);
-                    },
-                  ),
-          ),
-
-          // Action Buttons
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
+                  ],
                 ),
-              ],
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  if (_capturedImages.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      if (_capturedImages.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildActionButton(
+                                  AppStrings.get('camera', 'clear_all', lang),
+                                  Icons.delete_outline,
+                                  Colors.red.shade700,
+                                  () => _clearAll(lang),
+                                  outlined: true,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildActionButton(
+                                  '${AppStrings.get('camera', 'done', lang)} (${_capturedImages.length})',
+                                  Icons.check_circle,
+                                  Colors.green.shade700,
+                                  () => _confirmImages(lang),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Row(
                         children: [
                           Expanded(
                             child: _buildActionButton(
-                              'Clear All',
-                              Icons.delete_outline,
-                              Colors.red.shade700,
-                              _clearAll,
-                              outlined: true,
+                              AppStrings.get('camera', 'take_photo', lang),
+                              Icons.camera_alt,
+                              Colors.blue.shade700,
+                              _capturedImages.length < widget.maxImages
+                                  ? () => _captureImage()
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildActionButton(
-                              'Done (${_capturedImages.length})',
-                              Icons.check_circle,
-                              Colors.green.shade700,
-                              _confirmImages,
+                              AppStrings.get('camera', 'from_gallery', lang),
+                              Icons.photo_library,
+                              Colors.purple.shade700,
+                              _capturedImages.length < widget.maxImages
+                                  ? () => _pickFromGallery(lang)
+                                  : null,
+                              outlined: true,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildActionButton(
-                          'Take Photo',
-                          Icons.camera_alt,
-                          Colors.blue.shade700,
-                          _capturedImages.length < widget.maxImages
-                              ? () => _captureImage()
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildActionButton(
-                          'From Gallery',
-                          Icons.photo_library,
-                          Colors.purple.shade700,
-                          _capturedImages.length < widget.maxImages
-                              ? () => _pickFromGallery()
-                              : null,
-                          outlined: true,
-                        ),
-                      ),
                     ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Processing Overlay
-          if (_isProcessing)
-            Container(
-              color: Colors.black54,
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Compressing images...',
-                          style: GoogleFonts.roboto(fontSize: 14),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+
+              // Processing Overlay
+              if (_isProcessing)
+                Container(
+                  color: Colors.black54,
+                  child: Center(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 16),
+                            Text(
+                              AppStrings.get('camera', 'compressing_images', lang),
+                              style: GoogleFonts.roboto(fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(String lang) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -223,7 +227,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No Images Captured Yet',
+            AppStrings.get('camera', 'no_images_captured', lang),
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -232,7 +236,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap "Take Photo" to start',
+            AppStrings.get('camera', 'tap_take_photo_start', lang),
             style: GoogleFonts.roboto(
               fontSize: 14,
               color: Colors.grey.shade500,
@@ -354,7 +358,8 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
 
   Future<void> _captureImage() async {
     if (_capturedImages.length >= widget.maxImages) {
-      _showMaxImagesDialog();
+      final lang = context.read<LanguageProvider>().currentLanguage;
+      _showMaxImagesDialog(lang);
       return;
     }
 
@@ -367,15 +372,15 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
     }
   }
 
-  Future<void> _pickFromGallery() async {
+  Future<void> _pickFromGallery(String lang) async {
     if (_capturedImages.length >= widget.maxImages) {
-      _showMaxImagesDialog();
+      _showMaxImagesDialog(lang);
       return;
     }
 
     // TODO: Implement gallery picker
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gallery picker coming soon')),
+      SnackBar(content: Text(AppStrings.get('camera', 'gallery_coming_soon', lang))),
     );
   }
 
@@ -385,16 +390,16 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
     });
   }
 
-  void _clearAll() {
+  void _clearAll(String lang) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear All Images?'),
-        content: const Text('This will remove all captured images. Are you sure?'),
+        title: Text(AppStrings.get('camera', 'clear_all_images', lang)),
+        content: Text(AppStrings.get('camera', 'clear_all_confirm', lang)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(AppStrings.get('camera', 'cancel', lang)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -406,7 +411,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade700,
             ),
-            child: const Text('Clear All'),
+            child: Text(AppStrings.get('camera', 'clear_all', lang)),
           ),
         ],
       ),
@@ -433,12 +438,12 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
     );
   }
 
-  void _showMaxImagesDialog() {
+  void _showMaxImagesDialog(String lang) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Maximum Images Reached'),
-        content: Text('You can only add up to ${widget.maxImages} images per report.'),
+        title: Text(AppStrings.get('camera', 'maximum_images_reached', lang)),
+        content: Text(AppStrings.get('camera', 'max_images_message', lang).replaceAll('{count}', '${widget.maxImages}')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -449,10 +454,10 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
     );
   }
 
-  Future<void> _confirmImages() async {
+  Future<void> _confirmImages(String lang) async {
     if (_capturedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please capture at least one image')),
+        SnackBar(content: Text(AppStrings.get('camera', 'capture_one_image', lang))),
       );
       return;
     }
@@ -460,15 +465,15 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Images'),
+        title: Text(AppStrings.get('camera', 'confirm_images', lang)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('You have captured ${_capturedImages.length} image(s).'),
+            Text(AppStrings.get('camera', 'captured_images_count', lang).replaceAll('{count}', '${_capturedImages.length}')),
             const SizedBox(height: 12),
             Text(
-              'Images will be compressed automatically to reduce upload time and server load.',
+              AppStrings.get('camera', 'compress_info', lang),
               style: GoogleFonts.roboto(
                 fontSize: 12,
                 color: Colors.grey.shade600,
@@ -487,7 +492,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Recommended: 4-5 images from different angles',
+                      AppStrings.get('camera', 'recommended_images', lang),
                       style: GoogleFonts.roboto(
                         fontSize: 11,
                         color: Colors.blue.shade900,
@@ -502,25 +507,25 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Add More'),
+            child: Text(AppStrings.get('camera', 'add_more', lang)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green.shade700,
             ),
-            child: const Text('Confirm'),
+            child: Text(AppStrings.get('camera', 'confirm', lang)),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      await _processAndUploadImages();
+      await _processAndUploadImages(lang);
     }
   }
 
-  Future<void> _processAndUploadImages() async {
+  Future<void> _processAndUploadImages(String lang) async {
     setState(() => _isProcessing = true);
 
     try {
@@ -539,7 +544,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${compressedPaths.length} images ready for upload'),
+            content: Text(AppStrings.get('camera', 'images_ready_upload', lang).replaceAll('{count}', '${compressedPaths.length}')),
             backgroundColor: Colors.green.shade700,
           ),
         );
@@ -557,7 +562,7 @@ class _MultiImageCaptureScreenState extends State<MultiImageCaptureScreen> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error processing images: $e'),
+            content: Text('${AppStrings.get('camera', 'error_processing_images', lang)}: $e'),
             backgroundColor: Colors.red.shade700,
           ),
         );

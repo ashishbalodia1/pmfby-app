@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/insurance_claim.dart';
+import '../../providers/language_provider.dart';
+import '../../localization/app_localizations.dart';
 
 class FileClaimScreen extends StatefulWidget {
   const FileClaimScreen({super.key});
@@ -122,20 +124,23 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'नया दावा दर्ज करें',
-          style: GoogleFonts.poppins(),
-        ),
-        backgroundColor: Colors.green.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        final lang = languageProvider.currentLanguage;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(
+              AppStrings.get('claims', 'file_new_claim', lang),
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.green.shade700,
+            foregroundColor: Colors.white,
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Header Info
@@ -154,7 +159,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'कृपया सभी जानकारी सही-सही भरें\nPlease fill all details correctly',
+                        AppStrings.get('claims', 'fill_details_correctly', lang),
                         style: GoogleFonts.notoSans(
                           fontSize: 13,
                           color: Colors.blue.shade900,
@@ -169,7 +174,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Crop Type
               Text(
-                'फसल का नाम (Crop Name) *',
+                AppStrings.get('claims', 'crop_name', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -179,7 +184,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
               TextFormField(
                 controller: _cropController,
                 decoration: InputDecoration(
-                  hintText: 'जैसे: धान, गेहूं, गन्ना (e.g., Rice, Wheat)',
+                  hintText: AppStrings.get('claims', 'crop_name_hint', lang),
                   prefixIcon: const Icon(Icons.grass),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -189,7 +194,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'कृपया फसल का नाम दर्ज करें';
+                    return AppStrings.get('claims', 'enter_crop_name', lang);
                   }
                   return null;
                 },
@@ -198,7 +203,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Damage Reason
               Text(
-                'नुकसान का कारण (Damage Reason) *',
+                AppStrings.get('claims', 'damage_reason', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -235,7 +240,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Incident Date
               Text(
-                'घटना की तारीख (Incident Date) *',
+                AppStrings.get('claims', 'incident_date', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -267,7 +272,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Estimated Loss
               Text(
-                'अनुमानित नुकसान % (Estimated Loss %)',
+                AppStrings.get('claims', 'estimated_loss', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -278,7 +283,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                 controller: _estimatedLossController,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  hintText: 'जैसे: 50 (50% नुकसान)',
+                  hintText: AppStrings.get('claims', 'estimated_loss_hint', lang),
                   prefixIcon: const Icon(Icons.percent),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -290,7 +295,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                   if (value != null && value.isNotEmpty) {
                     final number = double.tryParse(value);
                     if (number == null || number < 0 || number > 100) {
-                      return 'कृपया 0-100 के बीच संख्या दर्ज करें';
+                      return AppStrings.get('claims', 'enter_valid_percentage', lang);
                     }
                   }
                   return null;
@@ -300,7 +305,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Description
               Text(
-                'विवरण (Description) *',
+                AppStrings.get('claims', 'description', lang),
                 style: GoogleFonts.poppins(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -311,7 +316,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                 controller: _descriptionController,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  hintText: 'नुकसान का विस्तृत विवरण दें...\nProvide detailed description of damage...',
+                  hintText: AppStrings.get('claims', 'description_hint', lang),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -320,10 +325,10 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'कृपया विवरण दर्ज करें';
+                    return AppStrings.get('claims', 'enter_description', lang);
                   }
                   if (value.length < 20) {
-                    return 'कृपया कम से कम 20 अक्षर दर्ज करें';
+                    return AppStrings.get('claims', 'min_characters', lang);
                   }
                   return null;
                 },
@@ -343,7 +348,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                     Icon(Icons.add_a_photo, color: Colors.green.shade700, size: 40),
                     const SizedBox(height: 8),
                     Text(
-                      'फोटो सबूत जोड़ें (Add Photo Evidence)',
+                      AppStrings.get('claims', 'add_photo_evidence', lang),
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -354,7 +359,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                     ElevatedButton.icon(
                       onPressed: () => context.push('/capture-image'),
                       icon: const Icon(Icons.camera_alt),
-                      label: const Text('फोटो लें (Take Photo)'),
+                      label: Text(AppStrings.get('camera', 'take_photo', lang)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green.shade600,
                         foregroundColor: Colors.white,
@@ -387,7 +392,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
                         ),
                       )
                     : Text(
-                        'दावा जमा करें (Submit Claim)',
+                        AppStrings.get('claims', 'submit_claim', lang),
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -398,8 +403,7 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
 
               // Help Text
               Text(
-                '⚠️ दावा जमा करने के बाद, आपको 7-15 दिनों में प्रतिक्रिया मिलेगी\n'
-                'After submitting, you will receive response in 7-15 days',
+                AppStrings.get('claims', 'response_time_info', lang),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
@@ -411,6 +415,8 @@ class _FileClaimScreenState extends State<FileClaimScreen> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 }
