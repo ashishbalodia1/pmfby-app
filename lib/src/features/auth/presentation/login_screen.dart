@@ -133,7 +133,7 @@ Future<void> _verifyOTP() async {
         
         // Create user model (default as farmer)
         final newUser = User(
-          id: user.uid,
+          userId: user.uid,
           name: _nameController.text.trim().isEmpty 
               ? 'User ${_phoneController.text}' 
               : _nameController.text.trim(),
