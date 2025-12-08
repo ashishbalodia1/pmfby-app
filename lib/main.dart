@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -67,40 +68,38 @@ Future<void> initializeApp() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    debugPrint('✅ Firebase initialized successfully');
+    if (kDebugMode) debugPrint('✅ Firebase initialized');
   } catch (e) {
     debugPrint('⚠️ Firebase initialization error: $e');
   }
 
-  // MongoDB initialization
+  // MongoDB initialization (optional - app works without it)
   try {
     await MongoDBService.instance.connect();
-    debugPrint('✅ MongoDB initialized successfully');
+    if (kDebugMode) debugPrint('✅ MongoDB connected');
   } catch (e) {
-    debugPrint('⚠️ MongoDB initialization failed: $e');
+    if (kDebugMode) debugPrint('⚠️ MongoDB not available (using local storage): $e');
+    // App will continue to work with local storage only
   }
 
   // Local Auth initialization (with demo user logic)
   final authService = AuthService();
   await authService.initialize();
-  debugPrint('✅ Auth service initialized');
 
   final allUsers = authService.getAllUsers();
-  debugPrint('📊 Number of users in database: ${allUsers.length}');
 
   if (allUsers.isEmpty) {
-    debugPrint('🔧 Creating demo users...');
+    if (kDebugMode) debugPrint('🔧 Creating demo users...');
     await _createDemoUsers(authService);
-    debugPrint('✅ Demo users created successfully');
+    if (kDebugMode) debugPrint('✅ Demo users created');
   }
 
   // Initialize connectivity and auto-sync services
-  debugPrint('🔄 Initializing connectivity and sync services...');
   final connectivityService = ConnectivityService();
   final autoSyncService = AutoSyncService();
   await autoSyncService.initializeNotifications();
   await autoSyncService.initializeBackgroundSync();
-  debugPrint('✅ All services initialized successfully');
+  if (kDebugMode) debugPrint('✅ Initialization complete');
 }
 
 Future<void> _createDemoUsers(AuthService authService) async {
@@ -334,7 +333,7 @@ class _KrashiBandhuAppState extends State<KrashiBandhuApp> {
   late AutoSyncService _autoSyncService;
 
   Future<void> _initialize() async {
-    debugPrint('🚀 Starting app initialization...');
+    if (kDebugMode) debugPrint('🚀 Starting initialization...');
     await initializeApp();
     
     // Initialize providers after splash
@@ -346,7 +345,7 @@ class _KrashiBandhuAppState extends State<KrashiBandhuApp> {
     _connectivityService = ConnectivityService();
     _autoSyncService = AutoSyncService();
     
-    debugPrint('✅ All initialization complete');
+    if (kDebugMode) debugPrint('✅ Ready');
     
     if (mounted) {
       setState(() {

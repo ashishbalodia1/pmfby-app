@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 
@@ -12,6 +13,8 @@ import 'package:mailer/smtp_server.dart';
 /// 4. Mailtrap (Free tier: 500 emails/month for testing)
 /// 5. EmailJS (Free tier: 200 emails/month)
 class EmailOTPService {
+  // Set to true to enable verbose logging (for debugging)
+  static const bool _verboseLogging = true;
   // OTP storage (in production, use secure backend storage)
   static final Map<String, OTPData> _otpStorage = {};
   
@@ -24,8 +27,11 @@ class EmailOTPService {
 
   /// Generate a 6-digit OTP
   static String generateOTP() {
+    if (_verboseLogging) developer.log('🔢 [EmailOTP] Generating new OTP...');
     final random = Random.secure();
-    return (100000 + random.nextInt(900000)).toString();
+    final otp = (100000 + random.nextInt(900000)).toString();
+    if (_verboseLogging) developer.log('✅ [EmailOTP] OTP generated successfully: ${otp.substring(0, 2)}****');
+    return otp;
   }
 
   /// Send OTP via Email using Gmail SMTP (Free)
@@ -42,18 +48,25 @@ class EmailOTPService {
     required String purpose, // 'login', 'register', 'verify'
   }) async {
     try {
+      if (_verboseLogging) developer.log('📧 [EmailOTP] Starting OTP send process for: $email, purpose: $purpose');
+      if (_verboseLogging) developer.log('🔍 [EmailOTP] Checking rate limit for: $email');
+      
       // Rate limiting check
       if (_lastSentTime.containsKey(email)) {
         final timeSinceLastSent = DateTime.now().difference(_lastSentTime[email]!);
         if (timeSinceLastSent < rateLimitDuration) {
           final waitSeconds = (rateLimitDuration - timeSinceLastSent).inSeconds;
+          if (_verboseLogging) developer.log('⏰ [EmailOTP] Rate limit active: Wait $waitSeconds seconds');
           debugPrint('⏰ Rate limit: Wait $waitSeconds seconds before resending');
           throw Exception('Please wait $waitSeconds seconds before requesting another OTP');
         }
       }
+      if (_verboseLogging) developer.log('✅ [EmailOTP] Rate limit check passed');
 
       // Generate OTP
       final otp = generateOTP();
+      if (_verboseLogging) developer.log('🔐 [EmailOTP] OTP generated: ${otp.substring(0, 2)}****, length: ${otp.length}');
+      if (_verboseLogging) developer.log('💾 [EmailOTP] Storing OTP in memory...');
       
       // Store OTP with expiry
       _otpStorage[email] = OTPData(
@@ -62,33 +75,38 @@ class EmailOTPService {
         purpose: purpose,
       );
       _lastSentTime[email] = DateTime.now();
+      if (_verboseLogging) developer.log('💾 [EmailOTP] OTP stored in memory for email: $email');
+      if (_verboseLogging) developer.log('📊 [EmailOTP] Current OTP storage size: ${_otpStorage.length} entries');
 
-      // For development/demo mode - just print OTP
+      // For development - also print OTP to console for easy testing
       if (kDebugMode) {
         debugPrint('🔐 OTP for $email: $otp (Valid for 10 minutes)');
-        // In demo mode, we'll still return true but won't send actual email
-        return true;
       }
 
       // Production: Send actual email
+      if (_verboseLogging) developer.log('📤 [EmailOTP] Attempting to send email via SMTP...');
+      if (_verboseLogging) developer.log('🔧 [EmailOTP] Retrieving SMTP server configuration...');
       // Configure your SMTP settings here
       final smtpServer = await _getSmtpServer();
       
       if (smtpServer == null) {
         // Fallback to demo mode if SMTP not configured
-        debugPrint('⚠️ SMTP not configured, using demo mode');
+        if (_verboseLogging) developer.log('⚠️ [EmailOTP] SMTP not configured, using demo mode');
         return true;
       }
 
+      if (_verboseLogging) developer.log('📝 [EmailOTP] Building email message...');
       final message = Message()
         ..from = Address(_getSenderEmail(), 'Krishi Bandhu')
         ..recipients.add(email)
         ..subject = 'Your Krishi Bandhu OTP - $otp'
         ..html = _buildEmailTemplate(otp, purpose);
 
+      if (_verboseLogging) developer.log('📨 [EmailOTP] Sending email to: $email');
       try {
         final sendReport = await send(message, smtpServer);
-        debugPrint('✅ Email sent: ${sendReport.toString()}');
+        if (_verboseLogging) developer.log('✅ [EmailOTP] Email sent successfully: ${sendReport.toString()}');
+        if (kDebugMode) debugPrint('✅ Email sent successfully');
         return true;
       } on MailerException catch (e) {
         debugPrint('❌ Email send failed: ${e.toString()}');
@@ -103,18 +121,27 @@ class EmailOTPService {
 
   /// Verify OTP
   static bool verifyOTP(String email, String otp) {
+    if (_verboseLogging) developer.log('🔐 [EmailOTP] Starting OTP verification for: $email');
+    if (_verboseLogging) developer.log('🔐 [EmailOTP] Provided OTP: ${otp.substring(0, 2)}****, length: ${otp.length}');
+    
     if (!_otpStorage.containsKey(email)) {
-      debugPrint('❌ No OTP found for $email');
+      if (_verboseLogging) developer.log('❌ [EmailOTP] No OTP found in storage for: $email');
+      if (kDebugMode) debugPrint('❌ No OTP found for $email');
       return false;
     }
 
     final otpData = _otpStorage[email]!;
+    if (_verboseLogging) developer.log('💾 [EmailOTP] Found stored OTP created at: ${otpData.createdAt}');
     
     // Check if OTP is expired
     final now = DateTime.now();
-    if (now.difference(otpData.createdAt) > otpValidity) {
+    final timeSinceCreation = now.difference(otpData.createdAt);
+    if (_verboseLogging) developer.log('⏱️ [EmailOTP] Time since OTP creation: ${timeSinceCreation.inMinutes} minutes, ${timeSinceCreation.inSeconds % 60} seconds');
+    
+    if (timeSinceCreation > otpValidity) {
       _otpStorage.remove(email);
-      debugPrint('❌ OTP expired for $email');
+      if (_verboseLogging) developer.log('❌ [EmailOTP] OTP expired (validity: ${otpValidity.inMinutes} minutes)');
+      if (kDebugMode) debugPrint('❌ OTP expired for $email');
       return false;
     }
 
@@ -122,78 +149,72 @@ class EmailOTPService {
     if (otpData.otp == otp) {
       _otpStorage.remove(email); // Remove after successful verification
       _lastSentTime.remove(email); // Reset rate limit
-      debugPrint('✅ OTP verified for $email');
+      if (_verboseLogging) developer.log('✅ [EmailOTP] OTP verified successfully for: $email');
+      if (kDebugMode) debugPrint('✅ OTP verified for $email');
       return true;
     }
 
-    debugPrint('❌ Invalid OTP for $email');
+    if (_verboseLogging) developer.log('❌ [EmailOTP] Invalid OTP - Expected: ${otpData.otp.substring(0, 2)}****, Got: ${otp.substring(0, 2)}****');
+    if (kDebugMode) debugPrint('❌ Invalid OTP for $email');
     return false;
   }
 
   /// Clear OTP for an email
   static void clearOTP(String email) {
+    if (_verboseLogging) developer.log('🗑️ [EmailOTP] Clearing OTP for: $email');
+    final hadOtp = _otpStorage.containsKey(email);
     _otpStorage.remove(email);
     _lastSentTime.remove(email);
+    if (_verboseLogging) developer.log('✅ [EmailOTP] OTP cleared successfully (had OTP: $hadOtp)');
   }
 
   /// Get remaining validity time for OTP
   static Duration? getRemainingValidity(String email) {
-    if (!_otpStorage.containsKey(email)) return null;
+    if (_verboseLogging) developer.log('⏱️ [EmailOTP] Checking remaining validity for: $email');
+    if (!_otpStorage.containsKey(email)) {
+      if (_verboseLogging) developer.log('❌ [EmailOTP] No OTP found for validity check');
+      return null;
+    }
     
     final otpData = _otpStorage[email]!;
     final elapsed = DateTime.now().difference(otpData.createdAt);
     final remaining = otpValidity - elapsed;
     
+    if (_verboseLogging) developer.log('⏱️ [EmailOTP] Remaining validity: ${remaining.inMinutes}m ${remaining.inSeconds % 60}s');
     return remaining.isNegative ? null : remaining;
   }
 
   // Private helper methods
 
   static Future<SmtpServer?> _getSmtpServer() async {
+    if (_verboseLogging) developer.log('⚙️ [EmailOTP] _getSmtpServer() called');
     // Option 1: Gmail SMTP (Recommended)
     // Requires App Password from Google Account
-    // Uncomment and configure when ready for production
+    // 
+    // Setup Instructions:
+    // 1. Go to: https://myaccount.google.com/security
+    // 2. Enable 2-Factor Authentication if not already enabled
+    // 3. Go to: https://myaccount.google.com/apppasswords
+    // 4. Select "Mail" and "Other (Custom name)"
+    // 5. Copy the 16-character password and paste below
+    // 6. Uncomment the code below and add your credentials
     
-    /*
-    const gmailEmail = 'your-email@gmail.com';
-    const gmailAppPassword = 'your-16-char-app-password'; // Get from Google Account
+    const gmailEmail = 'rohanbairagi40@gmail.com';
+    const gmailAppPassword = 'mnrolimmcllmljeh'; // Removed spaces from app password
+    if (_verboseLogging) developer.log('📤 [EmailOTP] Using Gmail SMTP: $gmailEmail');
     return gmail(gmailEmail, gmailAppPassword);
-    */
-
-    // Option 2: Custom SMTP
-    /*
-    const host = 'smtp.gmail.com';
-    const port = 587;
-    const username = 'your-email@gmail.com';
-    const password = 'your-app-password';
-    
-    return SmtpServer(
-      host,
-      port: port,
-      username: username,
-      password: password,
-      ssl: false,
-      allowInsecure: false,
-    );
-    */
-
-    // Option 3: Outlook/Hotmail
-    /*
-    const email = 'your-email@outlook.com';
-    const password = 'your-password';
-    return hotmail(email, password);
-    */
-
-    // Return null for demo mode
-    return null;
   }
 
   static String _getSenderEmail() {
+    if (_verboseLogging) developer.log('📧 [EmailOTP] Getting sender email address...');
     // Configure your sender email here
-    return 'noreply@krashibandhu.in';
+    final senderEmail = 'rohanbairagi40@gmail.com';
+    if (_verboseLogging) developer.log('📧 [EmailOTP] Sender email: $senderEmail');
+    return senderEmail;
   }
 
   static String _buildEmailTemplate(String otp, String purpose) {
+    if (_verboseLogging) developer.log('📄 [EmailOTP] Building email template for purpose: $purpose');
     final purposeText = purpose == 'login' 
         ? 'login to your account'
         : purpose == 'register'

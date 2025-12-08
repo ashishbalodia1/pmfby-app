@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:developer' as developer;
 import '../domain/models/user_model.dart';
 import 'providers/auth_provider.dart';
 import '../../../services/email_otp_service.dart';
+import '../../../services/mongodb_service.dart';
+import '../../../services/aadhar_service.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -27,6 +31,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _phoneVerified = false;
   bool _phoneOtpSent = false;
   final _phoneOtpController = TextEditingController();
+  
+  // Aadhar verification
+  bool _aadharVerified = false;
+  bool _aadharOtpSent = false;
+  final _aadharMobileController = TextEditingController();
+  final _aadharOtpController = TextEditingController();
   
   // Additional validation flags
   bool _passwordStrong = false;
@@ -95,6 +105,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _stateController.dispose();
     _farmSizeController.dispose();
     _aadharController.dispose();
+    _aadharMobileController.dispose();
+    _aadharOtpController.dispose();
     _officialIdController.dispose();
     _designationController.dispose();
     _departmentController.dispose();
@@ -131,6 +143,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    developer.log('📧 Attempting to send OTP to: ${_emailController.text.trim()}');
+    
     setState(() {
       _isLoading = true;
     });
@@ -141,10 +155,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         purpose: 'register',
       );
 
+      developer.log('📧 OTP send result: $success');
+      
       if (success) {
         setState(() {
           _otpSent = true;
         });
+        developer.log('✅ OTP sent successfully to ${_emailController.text.trim()}');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -154,8 +172,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ),
           );
         }
+      } else {
+        developer.log('❌ Failed to send OTP');
+        _showError('Failed to send OTP. Please try again.');
       }
     } catch (e) {
+      developer.log('❌ Error sending OTP: $e');
       _showError(e.toString());
     } finally {
       if (mounted) {
@@ -172,6 +194,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    developer.log('🔐 Attempting to verify OTP for: ${_emailController.text.trim()}');
+    developer.log('🔐 Entered OTP: ${_otpController.text.trim()}');
+    
     setState(() {
       _isLoading = true;
     });
@@ -182,10 +207,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         _otpController.text.trim(),
       );
 
+      developer.log('🔐 OTP verification result: $isValid');
+      
       if (isValid) {
         setState(() {
           _emailVerified = true;
         });
+        developer.log('✅ Email verified successfully: ${_emailController.text.trim()}');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -195,8 +224,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           );
         }
       } else {
+        developer.log('❌ OTP verification failed - invalid or expired');
         _showError('Invalid or expired OTP. Please try again.');
       }
+    } catch (e) {
+      developer.log('❌ Error verifying OTP: $e');
+      _showError('Verification error: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -283,14 +316,97 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
   
   bool _validateAadhar(String aadhar) {
-    // Basic Aadhar validation: 12 digits
-    if (aadhar.length != 12) return false;
+    return AadharService.instance.validateAadharNumber(aadhar);
+  }
+  
+  Future<void> _sendAadharMobileOTP() async {
+    if (_aadharController.text.isEmpty) {
+      _showError('Please enter Aadhar number first');
+      return;
+    }
     
-    // Check if all characters are digits
-    if (!RegExp(r'^[0-9]+$').hasMatch(aadhar)) return false;
+    if (!_validateAadhar(_aadharController.text)) {
+      _showError('Invalid Aadhar number. Please check and try again.');
+      return;
+    }
     
-    // Verhoeff algorithm for Aadhar validation (simplified)
-    return true;
+    if (_aadharMobileController.text.isEmpty) {
+      _showError('Please enter Aadhar-linked mobile number');
+      return;
+    }
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final success = await AadharService.instance.sendAadharMobileOTP(
+        _aadharController.text,
+        _aadharMobileController.text,
+      );
+
+      if (success && mounted) {
+        setState(() {
+          _aadharOtpSent = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP sent to ${_aadharMobileController.text}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError('Failed to send OTP. Please try again.');
+      }
+    } catch (e) {
+      _showError('Failed to send OTP: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _verifyAadharMobileOTP() async {
+    if (_aadharOtpController.text.isEmpty) {
+      _showError('Please enter the OTP');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final isValid = await AadharService.instance.verifyAadharMobileOTP(
+        _aadharMobileController.text,
+        _aadharOtpController.text,
+      );
+
+      if (isValid && mounted) {
+        setState(() {
+          _aadharVerified = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Aadhar verified successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showError('Invalid OTP. Please try again.');
+      }
+    } catch (e) {
+      _showError('Verification failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
   
   void _checkPasswordStrength(String password) {
@@ -449,6 +565,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         _showError('Please enter a valid 12-digit Aadhar number');
         return false;
       }
+      if (!_validateAadhar(_aadharController.text)) {
+        _showError('Invalid Aadhar number. Please check the number.');
+        return false;
+      }
+      if (!_aadharVerified) {
+        _showError('Please verify your Aadhar number with mobile OTP first');
+        return false;
+      }
       if (_selectedCrops.isEmpty) {
         _showError('Please select at least one crop');
         return false;
@@ -508,16 +632,25 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   Future<void> _register() async {
+    developer.log('📝 Starting registration process...');
+    
     if (!_validateCommonFields() || !_validateRoleSpecificFields()) {
+      developer.log('❌ Validation failed');
       return;
     }
 
+    developer.log('✅ Validation passed');
+    developer.log('👤 User role: $_userRole');
+    developer.log('📧 Email: ${_emailController.text}');
+    developer.log('📱 Phone: ${_phoneController.text}');
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       final userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
+      developer.log('🆔 Generated userId: $userId');
 
       final user = User(
         userId: userId,
@@ -548,9 +681,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             : null,
       );
 
+      developer.log('🔄 Attempting to register user...');
       final success = await context.read<AuthProvider>().register(user);
+      developer.log('📊 Registration result: $success');
 
       if (success) {
+        developer.log('✅ Registration successful!');
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -560,14 +697,30 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           );
           // Delay to show the message
           await Future.delayed(const Duration(seconds: 1));
+          
+          developer.log('🏠 Navigating to dashboard...');
+          developer.log('👤 User role: $_userRole');
           if (mounted) {
-            context.go('/dashboard');
+            // Navigate based on user role
+            if (_userRole == 'farmer') {
+              developer.log('🚜 Redirecting to farmer dashboard');
+              context.go('/dashboard');
+            } else if (_userRole == 'official') {
+              developer.log('👮 Redirecting to officer dashboard');
+              context.go('/officer-dashboard');
+            } else {
+              developer.log('❓ Unknown role, defaulting to dashboard');
+              context.go('/dashboard');
+            }
           }
         }
       } else {
+        developer.log('❌ Registration failed - email already exists');
         _showError('Email already registered. Please login instead.');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      developer.log('❌ Registration error: $e');
+      developer.log('Stack trace: $stackTrace');
       _showError('Registration failed: $e');
     } finally {
       if (mounted) {
@@ -585,7 +738,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         title: const Text('Register'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () => context.go('/login'),
         ),
       ),
       body: PageView(
@@ -903,7 +1056,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           Row(
             children: [
               TextButton(
-                onPressed: () => context.pop(),
+                onPressed: () => context.go('/login'),
                 child: const Text('Back to Login'),
               ),
               const Spacer(),
@@ -981,25 +1134,142 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 16),
+            // Aadhar Number Field
             TextField(
               controller: _aadharController,
               decoration: InputDecoration(
-                labelText: 'Aadhar Number (12 digits)',
+                labelText: 'Aadhar Number (12 digits) *',
                 prefixIcon: const Icon(Icons.badge),
-                suffixIcon: _aadharController.text.length == 12 &&
-                        _validateAadhar(_aadharController.text)
+                suffixIcon: _aadharVerified
                     ? const Icon(Icons.check_circle, color: Colors.green)
-                    : null,
-                helperText: 'Required for insurance verification',
+                    : (_aadharController.text.length == 12
+                        ? (_validateAadhar(_aadharController.text)
+                            ? const Icon(Icons.info, color: Colors.orange)
+                            : const Icon(Icons.error, color: Colors.red))
+                        : null),
+                helperText: _aadharVerified
+                    ? '✅ Verified'
+                    : 'Required for insurance. Must be valid Aadhar.',
+                helperStyle: TextStyle(
+                  color: _aadharVerified ? Colors.green : null,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
               keyboardType: TextInputType.number,
               maxLength: 12,
+              enabled: !_aadharVerified,
               onChanged: (value) => setState(() {}),
             ),
-            const SizedBox(height: 24),
+            
+            // Aadhar Mobile Number Field
+            if (_aadharController.text.length == 12 &&
+                _validateAadhar(_aadharController.text) &&
+                !_aadharVerified) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _aadharMobileController,
+                decoration: InputDecoration(
+                  labelText: 'Aadhar-linked Mobile Number *',
+                  prefixIcon: const Icon(Icons.phone_android),
+                  helperText: 'Enter mobile number registered with this Aadhar',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                enabled: !_aadharOtpSent,
+              ),
+              
+              // Send OTP Button
+              if (_aadharMobileController.text.length == 10 && !_aadharOtpSent) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _sendAadharMobileOTP,
+                  icon: const Icon(Icons.sms),
+                  label: _isLoading
+                      ? const Text('Sending...')
+                      : const Text('Send OTP to Verify Aadhar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+              
+              // OTP Input Field
+              if (_aadharOtpSent && !_aadharVerified) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _aadharOtpController,
+                  decoration: InputDecoration(
+                    labelText: 'Enter OTP',
+                    prefixIcon: const Icon(Icons.lock),
+                    helperText: 'OTP sent to ${_aadharMobileController.text}',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _verifyAadharMobileOTP,
+                        icon: const Icon(Icons.verified_user),
+                        label: _isLoading
+                            ? const Text('Verifying...')
+                            : const Text('Verify OTP'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _sendAadharMobileOTP,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Resend'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+            
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Aadhar verification is mandatory for PMFBY insurance registration',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               'Select Crops You Grow',
               style: Theme.of(context).textTheme.titleMedium,

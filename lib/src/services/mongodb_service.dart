@@ -17,19 +17,22 @@ class MongoDBService {
   Future<void> connect() async {
     try {
       if (_db != null && _db!.isConnected) {
-        debugPrint('MongoDB already connected');
+        if (kDebugMode) debugPrint('MongoDB already connected');
         return;
       }
       
-      _db = await Db.create(MongoDBConfig.connectionString);
+      final connectionString = MongoDBConfig.connectionString;
+      if (kDebugMode) debugPrint('Connecting to MongoDB Atlas...');
+      
+      _db = await Db.create(connectionString);
       await _db!.open();
       
-      debugPrint('MongoDB connected successfully to ${MongoDBConfig.databaseName}');
+      if (kDebugMode) debugPrint('✅ MongoDB connected to ${MongoDBConfig.databaseName}');
       
       // Create indexes for better performance
       await _createIndexes();
     } catch (e) {
-      debugPrint('MongoDB connection error: $e');
+      if (kDebugMode) debugPrint('⚠️ MongoDB connection failed: $e');
       rethrow;
     }
   }
