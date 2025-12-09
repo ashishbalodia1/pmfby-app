@@ -1,9 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:math' as math;
 
-class PMFBYInfoScreen extends StatelessWidget {
+class PMFBYInfoScreen extends StatefulWidget {
   const PMFBYInfoScreen({super.key});
+
+  @override
+  State<PMFBYInfoScreen> createState() => _PMFBYInfoScreenState();
+}
+
+class _PMFBYInfoScreenState extends State<PMFBYInfoScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _flipController;
+  bool _showFront = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _flipController.dispose();
+    super.dispose();
+  }
+
+  void _flipCard() {
+    if (_showFront) {
+      _flipController.forward();
+    } else {
+      _flipController.reverse();
+    }
+    setState(() => _showFront = !_showFront);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,10 +53,10 @@ class PMFBYInfoScreen extends StatelessWidget {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Government of India Header
-            _buildGovernmentHeader(),
+            // Government of India Header - Centered with flip animation
+            Center(child: _buildGovernmentHeader()),
             const SizedBox(height: 24),
             
             // About PMFBY
@@ -62,6 +95,15 @@ class PMFBYInfoScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
+            // Agriculture Ministry Contact
+            _buildSectionCard(
+              'कृषि मंत्रालय संपर्क',
+              'Agriculture Ministry Contact',
+              Icons.account_balance,
+              _buildMinistryContact(),
+            ),
+            const SizedBox(height: 16),
+            
             // Official Links
             _buildSectionCard(
               'आधिकारिक लिंक',
@@ -76,61 +118,253 @@ class PMFBYInfoScreen extends StatelessWidget {
   }
 
   Widget _buildGovernmentHeader() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFFFF9933),
-              Color(0xFFFFFFFF),
-              Color(0xFF138808),
+    return GestureDetector(
+      onTap: _flipCard,
+      child: AnimatedBuilder(
+        animation: _flipController,
+        builder: (context, child) {
+          final angle = _flipController.value * math.pi;
+          final transform = Matrix4.identity()
+            ..setEntry(3, 2, 0.001)
+            ..rotateY(angle);
+
+          return Transform(
+            transform: transform,
+            alignment: Alignment.center,
+            child: angle < math.pi / 2 ? _buildFrontCard() : _buildBackCard(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFrontCard() {
+    return Container(
+      width: 320,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Colors.green.shade50],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.shade200, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.2),
+            blurRadius: 15,
+            spreadRadius: 3,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.green.shade600, Colors.green.shade700],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withOpacity(0.3),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.account_balance_rounded,
+              size: 45,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'भारत सरकार',
+            style: GoogleFonts.notoSansDevanagari(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.green.shade900,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Government of India',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 2,
+            width: 80,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.green.shade300, Colors.green.shade600],
+              ),
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: () async {
+              final uri = Uri.parse('https://agricoop.nic.in');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            child: Column(
+              children: [
+                Text(
+                  'कृषि एवं किसान कल्याण मंत्रालय',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansDevanagari(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Ministry of Agriculture & Farmers Welfare',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansDevanagari(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.language, size: 12, color: Colors.blue.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      'agricoop.nic.in',
+                      style: GoogleFonts.notoSansDevanagari(
+                        fontSize: 10,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.touch_app, size: 16, color: Colors.green.shade600),
+              const SizedBox(width: 6),
+              Text(
+                'Tap to see more',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackCard() {
+    return Transform(
+      transform: Matrix4.identity()..rotateY(math.pi),
+      alignment: Alignment.center,
+      child: Container(
+        width: 320,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            colors: [Colors.green.shade700, Colors.green.shade900],
           ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.green.withOpacity(0.3),
+              blurRadius: 15,
+              spreadRadius: 3,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.account_balance, size: 48, color: Color(0xFF000080)),
-            const SizedBox(height: 12),
+            Icon(Icons.info_outline, size: 40, color: Colors.white.withOpacity(0.9)),
+            const SizedBox(height: 16),
             Text(
-              'भारत सरकार',
-              style: GoogleFonts.notoSansDevanagari(
-                fontSize: 18,
+              'PMFBY - Empowering Farmers',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF000080),
+                color: Colors.white,
               ),
             ),
-            Text(
-              'Government of India',
-              style: GoogleFonts.notoSans(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF000080),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'कृषि एवं किसान कल्याण मंत्रालय',
-              style: GoogleFonts.notoSansDevanagari(
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-            ),
-            Text(
-              'Ministry of Agriculture & Farmers Welfare',
-              style: GoogleFonts.notoSans(
-                fontSize: 12,
-                color: Colors.black87,
-              ),
+            const SizedBox(height: 16),
+            _buildInfoRow(Icons.calendar_today, 'Launched: 2016'),
+            const SizedBox(height: 10),
+            _buildInfoRow(Icons.people, '36 Crore+ Farmers'),
+            const SizedBox(height: 10),
+            _buildInfoRow(Icons.currency_rupee, '₹1,35,000+ Cr Claims'),
+            const SizedBox(height: 10),
+            _buildInfoRow(Icons.phone, 'Helpline: 18001801551'),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app, size: 16, color: Colors.white.withOpacity(0.8)),
+                const SizedBox(width: 6),
+                Text(
+                  'Tap to flip back',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 16, color: Colors.white.withOpacity(0.9)),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: Colors.white.withOpacity(0.95),
+          ),
+        ),
+      ],
     );
   }
 
@@ -229,11 +463,25 @@ class PMFBYInfoScreen extends StatelessWidget {
   Widget _buildHelplineContent() {
     return Column(
       children: [
-        _buildHelplineRow('राष्ट्रीय हेल्पलाइन', 'National Helpline', '📞 1800-180-1551', true),
+        _buildHelplineRow('राष्ट्रीय हेल्पलाइन', 'National Helpline', '📞 18001801551', true, false),
         const SizedBox(height: 12),
-        _buildHelplineRow('किसान कॉल सेंटर', 'Kisan Call Center', '📞 1800-180-1551', true),
+        _buildHelplineRow('किसान कॉल सेंटर', 'Kisan Call Center', '📞 18001801551', true, false),
         const SizedBox(height: 12),
-        _buildHelplineRow('ईमेल सहायता', 'Email Support', '📧 pmfby@gov.in', false),
+        _buildHelplineRow('ईमेल सहायता', 'Email Support', '📧 pmfby-dac@gov.in', false, true),
+      ],
+    );
+  }
+
+  Widget _buildMinistryContact() {
+    return Column(
+      children: [
+        _buildHelplineRow('कृषि भवन हेल्पलाइन', 'Krishi Bhavan Helpline', '📞 01123382012', true, false),
+        const SizedBox(height: 12),
+        _buildHelplineRow('कृषि मंत्री कार्यालय', 'Agriculture Minister Office', '📞 01123070004', true, false),
+        const SizedBox(height: 12),
+        _buildHelplineRow('ईमेल संपर्क', 'Email Contact', '📧 agricoop@nic.in', false, true),
+        const SizedBox(height: 12),
+        _buildHelplineRow('वेबसाइट', 'Ministry Website', '🌐 agricoop.nic.in', false, false),
       ],
     );
   }
@@ -363,13 +611,41 @@ class PMFBYInfoScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHelplineRow(String hindiLabel, String englishLabel, String number, bool isPhone) {
+  Widget _buildHelplineRow(String hindiLabel, String englishLabel, String contact, bool isPhone, bool isEmail) {
     return InkWell(
       onTap: () async {
-        if (isPhone) {
-          final uri = Uri.parse('tel:${number.replaceAll(RegExp(r'[^\d]'), '')}');
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri);
+        try {
+          if (isPhone) {
+            final cleanNumber = contact.replaceAll(RegExp(r'[^\d]'), '');
+            final uri = Uri.parse('tel:$cleanNumber');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            }
+          } else if (isEmail) {
+            final emailAddress = contact.replaceAll(RegExp(r'[^\w@.\-]'), '');
+            final uri = Uri.parse('mailto:$emailAddress');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
+            }
+          } else {
+            // Website or other link
+            final cleanUrl = contact.replaceAll(RegExp(r'[^\w.:/\-]'), '');
+            final uri = Uri.parse(cleanUrl.startsWith('http') ? cleanUrl : 'https://$cleanUrl');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'लिंक खोलने में समस्या / Error opening link',
+                  style: GoogleFonts.notoSansDevanagari(),
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
         }
       },
@@ -404,8 +680,8 @@ class PMFBYInfoScreen extends StatelessWidget {
               ),
             ),
             Text(
-              number,
-              style: GoogleFonts.notoSans(
+              contact,
+              style: GoogleFonts.notoSansDevanagari(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: Colors.blue.shade700,
@@ -423,10 +699,28 @@ class PMFBYInfoScreen extends StatelessWidget {
         final uri = Uri.parse(url);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'लिंक खोलने में असमर्थ / Unable to open link',
+                  style: GoogleFonts.notoSansDevanagari(),
+                ),
+                backgroundColor: Colors.red.shade700,
+              ),
+            );
+          }
         }
       },
       icon: Icon(icon),
-      label: Text(label),
+      label: Text(
+        label,
+        style: GoogleFonts.notoSansDevanagari(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF138808),
         foregroundColor: Colors.white,

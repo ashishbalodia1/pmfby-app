@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../settings/language_settings_screen.dart';
+import '../../settings/presentation/theme_settings_screen.dart';
 import '../../../providers/language_provider.dart';
 import '../../../localization/app_localizations.dart';
 
@@ -63,16 +64,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         }
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final bgColor = isDark 
+            ? Theme.of(context).colorScheme.background.withOpacity(0.95)
+            : Colors.green.shade50.withOpacity(0.3);
+
         return Scaffold(
-          backgroundColor: Colors.grey.shade50,
+          backgroundColor: bgColor,
+          extendBodyBehindAppBar: true,
           body: CustomScrollView(
             slivers: [
-              // Profile header
+              // Profile header with glassmorphism
               SliverAppBar(
                 expandedHeight: 240,
                 floating: false,
                 pinned: true,
-                backgroundColor: Colors.green.shade700,
+                backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.85),
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(
                     decoration: BoxDecoration(
@@ -276,6 +283,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
+                              );
+                            },
+                          ),
+                          _buildActionTile(
+                            icon: Icons.palette,
+                            title: 'थीम / Theme',
+                            subtitle: "Change app appearance & dark mode",
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const ThemeSettingsScreen()),
                               );
                             },
                           ),

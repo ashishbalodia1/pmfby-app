@@ -105,7 +105,6 @@ class AadharService {
     return 'XXXX-XXXX-XXXX';
   }
   
-  /// Send OTP to Aadhar-linked mobile number
   /// In real implementation, this would call UIDAI API
   /// For demo, we'll accept user's mobile and send OTP there
   Future<bool> sendAadharMobileOTP(String aadharNumber, String mobileNumber) async {

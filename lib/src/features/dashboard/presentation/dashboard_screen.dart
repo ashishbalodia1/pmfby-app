@@ -34,14 +34,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final LocalStorageService _localStorageService = LocalStorageService();
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0.0;
+  bool _showTitle = false;
+  bool _isOfficer = false; // Check if user is officer (can be determined from phone number or profile)
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(() {
-      setState(() {
-        _scrollOffset = _scrollController.offset;
-      });
+      // Smooth title transition at 120px scroll
+      final shouldShowTitle = _scrollController.offset > 120;
+      if (shouldShowTitle != _showTitle) {
+        setState(() {
+          _showTitle = shouldShowTitle;
+          _scrollOffset = _scrollController.offset;
+        });
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserProfile();
@@ -59,8 +66,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    final autoSyncService = context.read<AutoSyncService>();
-    autoSyncService.stopPeriodicSync();
+    try {
+      final autoSyncService = context.read<AutoSyncService>();
+      autoSyncService.stopPeriodicSync();
+    } catch (e) {
+      // Context might be disposed
+    }
     super.dispose();
   }
 
@@ -101,6 +112,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else {
         setState(() {
           _userProfile = profile;
+          // Check if user is officer based on email or phone pattern
+          // Officers have emails ending with @agriculture.gov.in or phone starting with 1111
+          _isOfficer = profile.email?.contains('@agriculture.gov.in') == true ||
+                       profile.phoneNumber.startsWith('+911111') ||
+                       profile.phoneNumber.startsWith('1111');
           _isLoading = false;
         });
       }
@@ -247,6 +263,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHomeScreen() {
+    // OLD WORKING DASHBOARD - RESTORED!
     // Calculate blur intensity based on scroll (0 to 10)
     double blurIntensity = (_scrollOffset / 50).clamp(0.0, 10.0);
     // Calculate opacity for fade effect
@@ -264,6 +281,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
               floating: false,
               pinned: true,
               backgroundColor: const Color(0xFF1B5E20),
+              leading: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.white, Colors.green.shade50],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.agriculture_rounded,
+                      color: Colors.green.shade700,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+              title: AnimatedOpacity(
+                opacity: _showTitle ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  'PMFBY',
+                  style: GoogleFonts.notoSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Colors.white,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
               actions: [
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
@@ -288,17 +346,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         },
                         itemBuilder: (BuildContext context) {
                           return AppLanguages.supportedLanguages.map((lang) {
+                            final isSelected = languageProvider.currentLanguage == lang.code;
                             return PopupMenuItem<String>(
                               value: lang.code,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (languageProvider.currentLanguage == lang.code)
-                                    const Icon(Icons.check, size: 16, color: Colors.green),
-                                  if (languageProvider.currentLanguage == lang.code)
-                                    const SizedBox(width: 8),
-                                  Text(lang.nativeName),
-                                ],
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? Colors.green.shade50 : null,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isSelected)
+                                      Icon(Icons.check_circle, size: 18, color: Colors.green.shade700),
+                                    if (isSelected)
+                                      const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            lang.nativeName,
+                                            style: GoogleFonts.notoSans(
+                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                              color: isSelected ? Colors.green.shade900 : Colors.black87,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          if (lang.code != 'en')
+                                            Text(
+                                              lang.name,
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }).toList();
@@ -309,30 +398,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
               flexibleSpace: FlexibleSpaceBar(
-                titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
-                title: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'PMFBY',
-                      style: GoogleFonts.notoSans(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.white,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    Text(
-                      AppStrings.get('pmfbyInfo', 'scheme_name', context.read<LanguageProvider>().currentLanguage),
-                      style: GoogleFonts.notoSansDevanagari(
-                        fontSize: 11,
-                        color: Colors.white.withOpacity(0.95),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
                 background: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -370,64 +435,105 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 20, top: 70, right: 20, bottom: 50),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Apply blur and fade effect to welcome section
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(
-                                  sigmaX: blurIntensity,
-                                  sigmaY: blurIntensity,
-                                ),
-                                child: AnimatedOpacity(
-                                  opacity: opacity,
-                                  duration: const Duration(milliseconds: 50),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const Icon(
-                                          Icons.verified_user,
-                                          color: Colors.white,
-                                          size: 28,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              AppStrings.get('greetings', 'welcome', context.read<LanguageProvider>().currentLanguage),
-                                              style: GoogleFonts.notoSansDevanagari(
-                                                fontSize: 16,
-                                                color: Colors.white.withOpacity(0.9),
-                                                fontWeight: FontWeight.w400,
-                                              ),
-                                            ),
-                                            Text(
-                                              _userProfile?.name ?? "किसान भाई",
-                                              style: GoogleFonts.notoSans(
-                                                fontSize: 20,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                      // Beautiful agriculture background image with fallbacks
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: 0.18,
+                          child: Image.network(
+                            'https://images.pexels.com/photos/2132227/pexels-photo-2132227.jpeg?auto=compress&cs=tinysrgb&w=800',
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.green.shade800,
+                                      Colors.green.shade600,
                                     ],
                                   ),
                                 ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to another image
+                              return Image.network(
+                                'https://images.pexels.com/photos/1595104/pexels-photo-1595104.jpeg?auto=compress&cs=tinysrgb&w=800',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  // Final fallback - gradient background
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.green.shade700,
+                                          Colors.green.shade500,
+                                        ],
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.agriculture_rounded,
+                                      size: 120,
+                                      color: Colors.white24,
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 20,
+                        right: 20,
+                        bottom: 20,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.agriculture_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    AppStrings.get('greetings', 'welcome', context.read<LanguageProvider>().currentLanguage),
+                                    style: GoogleFonts.notoSansDevanagari(
+                                      fontSize: 14,
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _userProfile?.name ?? "किसान भाई",
+                                    style: GoogleFonts.notoSans(
+                                      fontSize: 20,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -513,6 +619,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         AppStrings.get('dashboard', 'total_land', context.read<LanguageProvider>().currentLanguage),
                         Icons.landscape,
                         Colors.green,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'भूमि विवरण: आपके पास कुल 5.0 एकड़ भूमि है। विस्तृत जानकारी के लिए प्रोफाइल देखें।',
+                                style: GoogleFonts.notoSansDevanagari(),
+                              ),
+                              backgroundColor: Colors.green,
+                              action: SnackBarAction(
+                                label: 'ठीक है',
+                                textColor: Colors.white,
+                                onPressed: () {},
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -522,6 +644,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         AppStrings.get('dashboard', 'crops', context.read<LanguageProvider>().currentLanguage),
                         Icons.eco,
                         Colors.orange,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'फसल विवरण: आपकी 3 फसलें रजिस्टर्ड हैं। अधिक जानकारी के लिए क्रॉप मॉनिटरिंग देखें।',
+                                style: GoogleFonts.notoSansDevanagari(),
+                              ),
+                              backgroundColor: Colors.orange,
+                              action: SnackBarAction(
+                                label: 'ठीक है',
+                                textColor: Colors.white,
+                                onPressed: () {},
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -531,6 +669,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         AppStrings.get('dashboard', 'active_claims', context.read<LanguageProvider>().currentLanguage),
                         Icons.pending_actions,
                         Colors.blue,
+                        () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'क्लेम्स: आपके 2 सक्रिय दावे हैं। क्लेम्स टैब में जाएं।',
+                                style: GoogleFonts.notoSansDevanagari(),
+                              ),
+                              backgroundColor: Colors.blue,
+                              action: SnackBarAction(
+                                label: 'ठीक है',
+                                textColor: Colors.white,
+                                onPressed: () {},
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -814,41 +968,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String label,
     IconData icon,
     Color color,
+    VoidCallback onTap,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 10,
+              spreadRadius: 2,
             ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.notoSans(
-              fontSize: 11,
-              color: Colors.grey.shade600,
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            Text(
+              label,
+              style: GoogleFonts.notoSans(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

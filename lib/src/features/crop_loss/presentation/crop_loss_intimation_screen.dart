@@ -102,126 +102,104 @@ class _CropLossIntimationScreenState extends State<CropLossIntimationScreen>
       builder: (context, languageProvider, child) {
         final lang = languageProvider.currentLanguage;
         return Scaffold(
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.red.shade700,
-                  Colors.white,
-                ],
-                stops: const [0.0, 0.3],
+          backgroundColor: Colors.grey.shade50,
+          appBar: AppBar(
+            backgroundColor: Colors.red.shade600,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => context.pop(),
+            ),
+            title: Text(
+              AppStrings.get('cropLoss', 'crop_loss_intimation', lang),
+              style: GoogleFonts.notoSansDevanagari(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
             ),
-            child: Column(
-              children: [
-                // Header section
-                Container(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 16,
-                    left: 16,
-                    right: 16,
-                    bottom: 24,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.support_agent, color: Colors.white),
+                onPressed: () => _showCustomerCareDialog(lang),
+              ),
+            ],
+          ),
+          body: Column(
+            children: [
+              // Top Alert Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.red.shade600, Colors.red.shade700],
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back, color: Colors.white),
-                            onPressed: () => context.pop(),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.support_agent, color: Colors.white),
-                            onPressed: () => _showCustomerCareDialog(lang),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Icon(
-                        Icons.report_problem,
-                        size: 60,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        AppStrings.get('cropLoss', 'crop_loss_intimation', lang),
-                        style: GoogleFonts.notoSans(
-                          fontSize: 24,
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Report within 72 hours of incident',
+                        style: GoogleFonts.notoSansDevanagari(
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Crop Loss Intimation',
-                        style: GoogleFonts.roboto(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Tab Bar
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey.shade700,
+                    labelStyle: GoogleFonts.notoSansDevanagari(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    unselectedLabelStyle: GoogleFonts.notoSansDevanagari(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    tabs: [
+                      Tab(text: AppStrings.get('cropLoss', 'new_report', lang)),
+                      Tab(text: AppStrings.get('cropLoss', 'my_reports', lang)),
                     ],
                   ),
                 ),
-
-                // Content section with tabs
-                Expanded(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30),
-                        topRight: Radius.circular(30),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        
-                        // Tab Bar
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: TabBar(
-                            controller: _tabController,
-                            indicator: BoxDecoration(
-                              color: Colors.red.shade700,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            labelColor: Colors.white,
-                            unselectedLabelColor: Colors.grey.shade700,
-                            labelStyle: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            tabs: [
-                              Tab(text: AppStrings.get('cropLoss', 'new_report', lang)),
-                              Tab(text: AppStrings.get('cropLoss', 'my_reports', lang)),
-                            ],
-                          ),
-                        ),
-                        
-                        // Tab Views
-                        Expanded(
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: [
-                              _buildNewReportTab(lang),
-                              _buildMyReportsTab(lang),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              ),
+              
+              // Tab Views
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildNewReportTab(lang),
+                    _buildMyReportsTab(lang),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -230,170 +208,247 @@ class _CropLossIntimationScreenState extends State<CropLossIntimationScreen>
 
   Widget _buildNewReportTab(String lang) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Instructions Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
+          const SizedBox(height: 8),
+          
+          // How to Report Card
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.blue.shade100, width: 1),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppStrings.get('cropLoss', 'how_to_file', lang),
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue.shade700,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.help_outline, color: Colors.blue.shade700, size: 20),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildInstructionStep('1', AppStrings.get('cropLoss', 'step1', lang)),
-                _buildInstructionStep('2', AppStrings.get('cropLoss', 'step2', lang)),
-                _buildInstructionStep('3', AppStrings.get('cropLoss', 'step3', lang)),
-                _buildInstructionStep('4', AppStrings.get('cropLoss', 'step4', lang)),
-                const SizedBox(height: 8),
-                Text(
-                  '⚠️ ${AppStrings.get('cropLoss', 'report_within_72hrs', lang)}',
-                  style: GoogleFonts.notoSans(
-                    fontSize: 12,
-                    color: Colors.red.shade700,
-                    fontWeight: FontWeight.w600,
+                      const SizedBox(width: 12),
+                      Text(
+                        'How to File Report',
+                        style: GoogleFonts.notoSansDevanagari(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  _buildInstructionStep('1', 'Take clear photos', 'Capture damage from multiple angles'),
+                  _buildInstructionStep('2', 'Fill in all required details', 'Crop type, area, loss percentage'),
+                  _buildInstructionStep('3', 'Submit within 72 hours of incident', 'Quick reporting ensures faster processing'),
+                  _buildInstructionStep('4', 'Track status in "My Reports"', 'Get updates on your claim'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.alarm, color: Colors.red.shade700, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Important: Report within 72 hours of incident',
+                            style: GoogleFonts.notoSansDevanagari(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Quick Actions
           Row(
             children: [
               Expanded(
-                child: _buildQuickActionButton(
-                  AppStrings.get('cropLoss', 'take_photos', lang),
-                  Icons.camera_alt,
-                  Colors.green,
+                child: _buildModernActionCard(
+                  'Take Photos',
+                  Icons.camera_alt_rounded,
+                  Colors.green.shade400,
                   () => context.push('/camera'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _buildQuickActionButton(
-                  AppStrings.get('cropLoss', 'call_support', lang),
-                  Icons.phone,
-                  Colors.blue,
+                child: _buildModernActionCard(
+                  'Call Support',
+                  Icons.phone_rounded,
+                  Colors.blue.shade400,
                   () => _showCustomerCareDialog(lang),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // File New Report Button
-          ElevatedButton(
-            onPressed: () => context.push('/file-crop-loss'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [Colors.red.shade600, Colors.red.shade700],
               ),
-              elevation: 4,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.add_circle_outline, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  AppStrings.get('cropLoss', 'file_new_report', lang),
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.shade300.withOpacity(0.5),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => context.push('/file-crop-loss'),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.add_circle, color: Colors.white, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        'File New Report',
+                        style: GoogleFonts.notoSansDevanagari(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
 
           const SizedBox(height: 24),
 
-          // Common Loss Types - keep English for now as these are technical terms
+          // Common Loss Types
           Text(
-            AppStrings.get('cropLoss', 'common_loss_types', lang),
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+            'Common Loss Types',
+            style: GoogleFonts.notoSansDevanagari(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
               color: Colors.grey.shade800,
             ),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          const SizedBox(height: 4),
+          Text(
+            'Quick reference for reporting',
+            style: GoogleFonts.notoSansDevanagari(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Column(
             children: [
-              _buildLossTypeChip('Flood', Icons.water),
-              _buildLossTypeChip('Drought', Icons.wb_sunny),
-              _buildLossTypeChip('Hailstorm', Icons.ac_unit),
-              _buildLossTypeChip('Pest Attack', Icons.bug_report),
-              _buildLossTypeChip('Disease', Icons.sick),
-              _buildLossTypeChip('Fire', Icons.local_fire_department),
+              Row(
+                children: [
+                  Expanded(child: _buildPremiumLossCard('Flood', Icons.water_drop, Colors.blue.shade500, Colors.blue.shade50)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildPremiumLossCard('Drought', Icons.wb_sunny, Colors.orange.shade500, Colors.orange.shade50)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _buildPremiumLossCard('Hailstorm', Icons.ac_unit, Colors.cyan.shade500, Colors.cyan.shade50)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildPremiumLossCard('Pest Attack', Icons.bug_report, Colors.green.shade500, Colors.green.shade50)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _buildPremiumLossCard('Disease', Icons.coronavirus, Colors.purple.shade500, Colors.purple.shade50)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildPremiumLossCard('Fire', Icons.local_fire_department, Colors.red.shade500, Colors.red.shade50)),
+                ],
+              ),
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
           // Emergency Contact Card
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.shade300),
+              gradient: LinearGradient(
+                colors: [Colors.orange.shade50, Colors.amber.shade50],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange.shade200, width: 1.5),
             ),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.warning_amber, color: Colors.amber.shade700),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppStrings.get('cropLoss', 'emergency_support', lang),
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.amber.shade900,
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.phone_in_talk, color: Colors.orange.shade700, size: 24),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  AppStrings.get('cropLoss', 'emergency_call_message', lang),
-                  style: GoogleFonts.roboto(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Emergency Support',
+                        style: GoogleFonts.notoSansDevanagari(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'For urgent crop loss, call 14447 immediately',
+                        style: GoogleFonts.notoSansDevanagari(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -498,38 +553,61 @@ class _CropLossIntimationScreenState extends State<CropLossIntimationScreen>
     );
   }
 
-  Widget _buildInstructionStep(String number, String text) {
+  Widget _buildInstructionStep(String number, String title, String subtitle) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 20,
-            height: 20,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              color: Colors.blue.shade700,
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade500, Colors.blue.shade700],
+              ),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.shade200,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Center(
               child: Text(
                 number,
-                style: const TextStyle(
+                style: GoogleFonts.notoSansDevanagari(
                   color: Colors.white,
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              text,
-              style: GoogleFonts.roboto(
-                fontSize: 13,
-                color: Colors.grey.shade700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.notoSansDevanagari(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.notoSansDevanagari(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -537,51 +615,105 @@ class _CropLossIntimationScreenState extends State<CropLossIntimationScreen>
     );
   }
 
-  Widget _buildQuickActionButton(
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: GoogleFonts.roboto(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+  Widget _buildModernActionCard(String label, IconData icon, Color color, VoidCallback onTap) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: color.withOpacity(0.3), width: 1.5),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color.withOpacity(0.08), color.withOpacity(0.15)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-          ],
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 36),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansDevanagari(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildLossTypeChip(String label, IconData icon) {
-    return Chip(
-      avatar: Icon(icon, size: 16),
-      label: Text(
-        label,
-        style: GoogleFonts.roboto(fontSize: 12),
+  Widget _buildPremiumLossCard(String label, IconData icon, Color iconColor, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, bgColor.withOpacity(0.3)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: iconColor.withOpacity(0.2), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: iconColor.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
-      backgroundColor: Colors.grey.shade100,
-      side: BorderSide(color: Colors.grey.shade300),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [iconColor.withOpacity(0.9), iconColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: iconColor.withOpacity(0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.notoSansDevanagari(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+          ),
+          Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey.shade400),
+        ],
+      ),
     );
   }
+
+
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Container(
