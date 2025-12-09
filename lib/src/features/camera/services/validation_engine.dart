@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../models/ar_camera_models.dart';
@@ -93,15 +94,37 @@ class ValidationEngine {
   // Quality history for smoothing
   final Queue<ImageQualityResult> _qualityHistory = Queue();
   static const _qualityHistorySize = 5;
+  ImageQualityResult? _lastQualityResult;
   
   bool _isRunning = false;
   bool get isRunning => _isRunning;
+  
+  // Current task type for conditional validation
+  String? _currentTaskType;
 
   ValidationEngine({
     this.thresholds = ValidationThresholds.standard,
     this.onValidationUpdate,
   })  : _qualityAnalyzer = ImageQualityAnalyzer(),
         _stabilityTracker = StabilityTracker();
+  
+  /// Set current task type to adjust validation rules
+  void setCurrentTaskType(String? taskType) {
+    _currentTaskType = taskType;
+  }
+  
+  /// Check if tilt validation should be enforced (only for top view, not for wide angle)
+  bool get shouldValidateTilt {
+    // Don't validate tilt for wide angle/far views - they need different angles
+    if (_currentTaskType == 'wideAngle' || _currentTaskType == 'wide_angle') {
+      return false;
+    }
+    // Only validate tilt for top view
+    return _currentTaskType == 'topView' || _currentTaskType == 'top_view';
+  }
+  
+  // Private getter for internal use
+  bool get _shouldValidateTilt => shouldValidateTilt;
 
   /// Start validation engine
   Future<void> start() async {
@@ -117,10 +140,20 @@ class ValidationEngine {
 
   /// Stop validation engine
   void stop() {
+    if (!_isRunning) return;
     _isRunning = false;
+    
+    // Cancel sensor subscriptions
     _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
     _gyroscopeSubscription?.cancel();
+    _gyroscopeSubscription = null;
+    
+    // Clear history but keep last result for potential resume
     _qualityHistory.clear();
+    
+    // Reset processing flag
+    _lastFrameProcess = null;
   }
 
   /// Process a camera frame for quality analysis
@@ -135,20 +168,43 @@ class ValidationEngine {
     }
     _lastFrameProcess = now;
     
-    // Analyze image quality
-    final qualityResult = await _qualityAnalyzer.analyzeImage(image);
-    
-    // Add to history for smoothing
-    _qualityHistory.addLast(qualityResult);
-    if (_qualityHistory.length > _qualityHistorySize) {
-      _qualityHistory.removeFirst();
+    try {
+      // Analyze image quality with timeout protection
+      final qualityResult = await _qualityAnalyzer.analyzeImage(image)
+        .timeout(
+          const Duration(milliseconds: 150),
+          onTimeout: () {
+            // Return last known result on timeout
+            return _lastQualityResult ?? const ImageQualityResult(
+              blurScore: 50,
+              exposureScore: 50,
+              brightnessScore: 50,
+              hasBacklight: false,
+              overallStatus: QualityStatus.good,
+              warnings: [],
+            );
+          },
+        );
+      
+      _lastQualityResult = qualityResult;
+      
+      // Add to history for smoothing
+      _qualityHistory.addLast(qualityResult);
+      if (_qualityHistory.length > _qualityHistorySize) {
+        _qualityHistory.removeFirst();
+      }
+      
+      // Get smoothed quality result
+      final smoothedQuality = _getSmoothedQuality();
+      
+      // Update validation state (only if still running)
+      if (_isRunning) {
+        _updateState(quality: smoothedQuality);
+      }
+    } catch (e) {
+      debugPrint('Frame processing error: $e');
+      // Continue without crashing - use last known state
     }
-    
-    // Get smoothed quality result
-    final smoothedQuality = _getSmoothedQuality();
-    
-    // Update validation state
-    _updateState(quality: smoothedQuality);
   }
 
   /// Update distance estimation (from ML or sensor data)
@@ -219,25 +275,28 @@ class ValidationEngine {
     final blockers = <String>[];
     final state = _currentState;
     
+    // Image quality checks - always important
     if (state.imageQuality != null) {
       if (state.imageQuality!.isBlurry) {
         blockers.add('Image is blurry - hold steady');
       }
       if (state.imageQuality!.exposureStatus == ExposureStatus.overexposed) {
-        blockers.add('Too bright - move to shade or reduce exposure');
+        blockers.add('Too bright - move to shade');
       }
       if (state.imageQuality!.exposureStatus == ExposureStatus.underexposed) {
-        blockers.add('Too dark - move to better lighting');
+        blockers.add('Too dark - need better lighting');
       }
       if (state.imageQuality!.hasBacklight) {
-        blockers.add('Backlight detected - reposition camera');
+        blockers.add('Backlight detected - change position');
       }
     }
     
-    if (state.tilt != null && state.tilt!.status == TiltStatus.tilted) {
-      blockers.add('Camera too tilted - hold level');
+    // Tilt check - ONLY for top view captures
+    if (shouldValidateTilt && state.tilt != null && state.tilt!.status == TiltStatus.tilted) {
+      blockers.add('Camera too tilted - hold level for top view');
     }
     
+    // Stability check - always important for blur prevention
     if (!state.isStable) {
       blockers.add('Camera not stable - hold steady');
     }
@@ -267,20 +326,21 @@ class ValidationEngine {
     double score = 100.0;
     final state = _currentState;
     
-    // Quality contribution (40%)
+    // Quality contribution (60% - most important)
+    // Blur and exposure are always critical
     if (state.imageQuality != null) {
       final qualityScore = (state.imageQuality!.blurScore + 
           state.imageQuality!.exposureScore) / 2;
-      score *= (qualityScore / 100) * 0.4 + 0.6;
+      score *= (qualityScore / 100) * 0.6 + 0.4;
     }
     
-    // Stability contribution (20%)
+    // Stability contribution (20%) - important for preventing blur
     if (!state.isStable) {
       score *= 0.8;
     }
     
-    // Tilt contribution (20%)
-    if (state.tilt != null) {
+    // Tilt contribution (20%) - ONLY for top view
+    if (shouldValidateTilt && state.tilt != null) {
       switch (state.tilt!.status) {
         case TiltStatus.level:
           break; // No penalty
@@ -293,11 +353,11 @@ class ValidationEngine {
       }
     }
     
-    // Distance contribution (20%)
-    if (state.distance != null && 
-        state.distance!.status != DistanceStatus.optimal) {
-      score *= 0.8;
-    }
+    // Distance contribution (skipped - not reliably measurable)
+    // if (state.distance != null && 
+    //     state.distance!.status != DistanceStatus.optimal) {
+    //   score *= 0.9;
+    // }
     
     return score.clamp(0.0, 100.0);
   }

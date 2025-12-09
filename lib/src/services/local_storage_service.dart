@@ -21,6 +21,7 @@ class PendingUpload {
   final SyncStatus status;
   final int retryCount;
   final String? errorMessage;
+  final String? cloudinaryUrl;  // Track uploaded URL to prevent duplicates
 
   PendingUpload({
     required this.id,
@@ -33,6 +34,7 @@ class PendingUpload {
     this.status = SyncStatus.pending,
     this.retryCount = 0,
     this.errorMessage,
+    this.cloudinaryUrl,
   });
 
   Map<String, dynamic> toJson() {
@@ -44,9 +46,10 @@ class PendingUpload {
       'latitude': latitude,
       'longitude': longitude,
       'capturedAt': capturedAt.toIso8601String(),
-      'status': status.name,
+      'status': status.toString(),
       'retryCount': retryCount,
       'errorMessage': errorMessage,
+      'cloudinaryUrl': cloudinaryUrl,
     };
   }
 
@@ -79,6 +82,7 @@ class PendingUpload {
     SyncStatus? status,
     int? retryCount,
     String? errorMessage,
+    String? cloudinaryUrl,
   }) {
     return PendingUpload(
       id: id ?? this.id,
@@ -91,6 +95,7 @@ class PendingUpload {
       status: status ?? this.status,
       retryCount: retryCount ?? this.retryCount,
       errorMessage: errorMessage ?? this.errorMessage,
+      cloudinaryUrl: cloudinaryUrl ?? this.cloudinaryUrl,
     );
   }
 }
@@ -137,6 +142,23 @@ class LocalStorageService {
   Future<int> getPendingUploadsCount() async {
     final uploads = await getPendingUploads();
     return uploads.where((u) => u.status == SyncStatus.pending || u.status == SyncStatus.failed).length;
+  }
+
+  // Update upload with Cloudinary URL after successful upload
+  Future<void> updateUploadUrl(String id, String cloudinaryUrl) async {
+    final uploads = await getPendingUploads();
+    final index = uploads.indexWhere((u) => u.id == id);
+    
+    if (index != -1) {
+      uploads[index] = uploads[index].copyWith(
+        cloudinaryUrl: cloudinaryUrl,
+        status: SyncStatus.synced,
+      );
+      
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = uploads.map((u) => u.toJson()).toList();
+      await prefs.setString(_pendingUploadsKey, jsonEncode(jsonList));
+    }
   }
 
   // Update upload status

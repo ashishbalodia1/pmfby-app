@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:provider/provider.dart';
 import '../../services/local_storage_service.dart';
+import '../../providers/language_provider.dart';
+import '../../localization/app_localizations.dart';
 
 class UploadStatusScreen extends StatefulWidget {
   const UploadStatusScreen({super.key});
@@ -39,12 +42,23 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+    
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(
-          'अपलोड स्थिति',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppStrings.get('uploads', 'upload_status', lang),
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18),
+            ),
+            Text(
+              AppStrings.get('uploads', 'upload_status', lang == 'hi' ? 'en' : 'hi'),
+              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w300),
+            ),
+          ],
         ),
         backgroundColor: Colors.green.shade700,
         foregroundColor: Colors.white,
@@ -68,7 +82,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildStatsCard(),
+                  _buildStatsCard(lang),
                   const SizedBox(height: 16),
                   if (_uploads.isEmpty)
                     _buildEmptyState()
@@ -80,7 +94,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
     );
   }
 
-  Widget _buildStatsCard() {
+  Widget _buildStatsCard(String lang) {
     if (_stats == null) return const SizedBox();
 
     return Container(
@@ -115,19 +129,19 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
             children: [
               _buildStatItem(
                 _stats!['pendingUploads'].toString(),
-                'लंबित',
+                '${AppStrings.get('uploads', 'pending', lang)}\n${AppStrings.get('uploads', 'pending', lang == 'hi' ? 'en' : 'hi')}',
                 Icons.schedule,
               ),
               Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
               _buildStatItem(
                 _stats!['syncedUploads'].toString(),
-                'समन्वयित',
+                '${AppStrings.get('uploads', 'synced', lang)}\n${AppStrings.get('uploads', 'synced', lang == 'hi' ? 'en' : 'hi')}',
                 Icons.check_circle,
               ),
               Container(width: 1, height: 40, color: Colors.white.withOpacity(0.3)),
               _buildStatItem(
                 _stats!['failedUploads'].toString(),
-                'विफल',
+                '${AppStrings.get('uploads', 'failed', lang)}\n${AppStrings.get('uploads', 'failed', lang == 'hi' ? 'en' : 'hi')}',
                 Icons.error,
               ),
             ],
@@ -142,9 +156,9 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'कुल आकार',
+                    '${AppStrings.get('uploads', 'total_size', lang)} / ${AppStrings.get('uploads', 'total_size', lang == 'hi' ? 'en' : 'hi')}',
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.white.withOpacity(0.9),
                     ),
                   ),

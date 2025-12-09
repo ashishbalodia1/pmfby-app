@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import '../models/ar_camera_models.dart';
@@ -95,43 +98,58 @@ class ImageQualityAnalyzer {
 
   /// Calculate blur score using Laplacian variance
   /// Higher score = sharper image
+  /// Uses optimized sampling to prevent frame blocking
   double _calculateBlurScore(Uint8List grayscale, int width, int height) {
-    // Sample a subset of pixels for performance
-    const sampleStep = 4;
+    // Adaptive sampling based on image size for performance
+    // Larger images need less dense sampling
+    final totalPixels = width * height;
+    final sampleStep = totalPixels > 1000000 ? 8 : (totalPixels > 500000 ? 6 : 4);
+    
     double variance = 0;
     int count = 0;
+    
+    // Sample center region more (where subject usually is)
+    final startY = height ~/ 4;
+    final endY = (height * 3) ~/ 4;
+    final startX = width ~/ 4;
+    final endX = (width * 3) ~/ 4;
 
     // Laplacian kernel: [0, 1, 0], [1, -4, 1], [0, 1, 0]
-    for (int y = 1; y < height - 1; y += sampleStep) {
-      for (int x = 1; x < width - 1; x += sampleStep) {
+    // This detects edges - high variance = sharp, low variance = blurry
+    for (int y = math.max(1, startY); y < math.min(height - 1, endY); y += sampleStep) {
+      for (int x = math.max(1, startX); x < math.min(width - 1, endX); x += sampleStep) {
         final idx = y * width + x;
         
-        if (idx - width >= 0 && 
-            idx + width < grayscale.length &&
-            idx - 1 >= 0 &&
-            idx + 1 < grayscale.length) {
-          
-          final laplacian = 
-              -4 * grayscale[idx] +
-              grayscale[idx - 1] +
-              grayscale[idx + 1] +
-              grayscale[idx - width] +
-              grayscale[idx + width];
-          
-          variance += laplacian * laplacian;
-          count++;
+        // Bounds check (paranoid safety)
+        if (idx >= grayscale.length || 
+            idx - width < 0 ||
+            idx + width >= grayscale.length) {
+          continue;
         }
+        
+        // Apply Laplacian operator
+        final center = grayscale[idx];
+        final left = grayscale[idx - 1];
+        final right = grayscale[idx + 1];
+        final top = grayscale[idx - width];
+        final bottom = grayscale[idx + width];
+        
+        final laplacian = -4 * center + left + right + top + bottom;
+        
+        variance += laplacian * laplacian;
+        count++;
       }
     }
 
-    if (count == 0) return 50;
+    if (count == 0) return 50; // Safe fallback
 
     // Normalize variance to 0-100 score
     final normalizedVariance = variance / count;
     
     // Map to score: higher variance = sharper
-    // Typical blur threshold is around 100-500 depending on resolution
-    final score = math.min(100.0, (normalizedVariance / 10).clamp(0.0, 100.0));
+    // Scale factor tuned for typical mobile cameras
+    // Variance > 500 = sharp, < 100 = blurry
+    final score = math.min(100.0, (normalizedVariance / 5).clamp(0.0, 100.0));
     
     return score.toDouble();
   }
@@ -254,6 +272,60 @@ class ImageQualityAnalyzer {
     final stability = math.max(0.0, 100.0 - (avgDiff * 2));
     
     return stability.toDouble();
+  }
+
+  /// Analyze a saved image file for quality (post-capture verification)
+  Future<ImageQualityResult> analyzeImageFile(String imagePath) async {
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) {
+        throw Exception('Image file not found');
+      }
+      
+      // Read image bytes
+      final bytes = await file.readAsBytes();
+      
+      // Decode image to get pixels
+      final codec = await instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      
+      // Convert to grayscale for analysis
+      final byteData = await image.toByteData(format: ImageByteFormat.rawRgba);
+      if (byteData == null) {
+        throw Exception('Failed to get image data');
+      }
+      
+      final pixels = byteData.buffer.asUint8List();
+      final grayscale = Uint8List(image.width * image.height);
+      
+      // Convert RGBA to grayscale
+      for (int i = 0; i < grayscale.length; i++) {
+        final pixelIndex = i * 4;
+        if (pixelIndex + 2 < pixels.length) {
+          final r = pixels[pixelIndex];
+          final g = pixels[pixelIndex + 1];
+          final b = pixels[pixelIndex + 2];
+          // Luminance formula
+          grayscale[i] = ((0.299 * r) + (0.587 * g) + (0.114 * b)).round().clamp(0, 255);
+        }
+      }
+      
+      // Analyze quality
+      final blurScore = _calculateBlurScore(grayscale, image.width, image.height);
+      final exposureMetrics = _calculateExposureMetrics(grayscale);
+      final hasBacklight = _detectBacklight(grayscale, image.width, image.height);
+      
+      return ImageQualityResult.analyze(
+        blurScore: blurScore,
+        exposureScore: exposureMetrics['exposure']!,
+        brightnessScore: exposureMetrics['brightness']!,
+        hasBacklight: hasBacklight,
+      );
+    } catch (e) {
+      debugPrint('Error analyzing image file: $e');
+      rethrow;
+    }
   }
 
   /// Dispose resources

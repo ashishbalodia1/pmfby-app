@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -148,6 +149,8 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       onTaskChange: (index, task) {
         _taskTransitionController.forward(from: 0.0);
         _showTaskInstruction(task.task);
+        // Update validation engine with current task type
+        _validationEngine.setCurrentTaskType(task.task.type.toString().split('.').last);
       },
       onAllTasksComplete: (completedTasks) {
         _onAllTasksComplete();
@@ -217,13 +220,22 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   Future<void> _setupCamera(int cameraIndex) async {
+    // Cleanup existing controller
     if (_controller != null) {
       try {
-        await _controller!.stopImageStream();
+        if (_controller!.value.isStreamingImages) {
+          await _controller!.stopImageStream();
+        }
       } catch (e) {
         debugPrint('Error stopping image stream: $e');
       }
-      await _controller!.dispose();
+      
+      try {
+        await _controller!.dispose();
+      } catch (e) {
+        debugPrint('Error disposing controller: $e');
+      }
+      _controller = null;
     }
 
     try {
@@ -239,15 +251,34 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
       if (!mounted) return;
 
-      _minZoom = await _controller!.getMinZoomLevel();
-      _maxZoom = await _controller!.getMaxZoomLevel();
-      _currentZoom = _minZoom;
-
-      // Start image stream for real-time analysis
+      // Get zoom capabilities
       try {
-        await _controller!.startImageStream(_processFrame);
+        _minZoom = await _controller!.getMinZoomLevel();
+        _maxZoom = await _controller!.getMaxZoomLevel();
+        _currentZoom = _minZoom;
       } catch (e) {
-        debugPrint('Error starting image stream: $e');
+        debugPrint('Error getting zoom levels: $e');
+        _minZoom = 1.0;
+        _maxZoom = 8.0;
+        _currentZoom = 1.0;
+      }
+
+      // Start image stream for real-time analysis with retry logic
+      bool streamStarted = false;
+      for (int attempt = 0; attempt < 3 && !streamStarted; attempt++) {
+        try {
+          await _controller!.startImageStream(_processFrame);
+          streamStarted = true;
+        } catch (e) {
+          debugPrint('Error starting image stream (attempt ${attempt + 1}): $e');
+          if (attempt < 2) {
+            await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+          }
+        }
+      }
+      
+      if (!streamStarted) {
+        throw Exception('Failed to start camera stream after 3 attempts');
       }
 
       // Start validation engine
@@ -256,38 +287,56 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       // Start task manager session
       _taskManager.startSession();
 
-      setState(() {
-        _isLoading = false;
-        _error = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = null;
+        });
+      }
     } catch (e) {
       debugPrint('Camera setup error: $e');
-      setState(() {
-        _error = 'Failed to initialize camera: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to initialize camera: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
   void _processFrame(CameraImage image) {
     // Skip if already processing or widget not mounted
-    if (_isProcessingFrame || !mounted) return;
+    if (_isProcessingFrame || !mounted || _controller == null) return;
+    
     _isProcessingFrame = true;
 
-    // Process frame in validation engine with timeout protection
-    Future.delayed(Duration.zero, () async {
+    // Process frame asynchronously without blocking camera stream
+    // Using microtask instead of Future.delayed for better performance
+    scheduleMicrotask(() async {
       try {
+        // Process with aggressive timeout to prevent blocking
         await _validationEngine.processFrame(image).timeout(
-          const Duration(milliseconds: 200),
+          const Duration(milliseconds: 100),
           onTimeout: () {
-            // Skip this frame if processing takes too long
-            debugPrint('Frame processing timeout - skipping frame');
+            // Silently skip frame on timeout - normal behavior
           },
         );
+        
+        // Estimate distance based on zoom level (simple heuristic)
+        // Lower zoom = likely farther, higher zoom = likely closer
+        if (mounted) {
+          final estimatedDistance = _estimateDistance(_currentZoom);
+          _validationEngine.updateDistanceEstimate(estimatedDistance, 0.6);
+        }
       } catch (e) {
-        debugPrint('Frame processing error: $e');
+        // Silently handle errors - don't spam console
+        if (kDebugMode && e.toString().contains('disposed')) {
+          debugPrint('Frame processing error (camera disposed): $e');
+        }
       } finally {
-        _isProcessingFrame = false;
+        if (mounted) {
+          _isProcessingFrame = false;
+        }
       }
     });
   }
@@ -644,6 +693,109 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       }
 
       debugPrint('Image saved to: $imagePath');
+      
+      // Post-capture blur verification
+      final qualityAnalyzer = ImageQualityAnalyzer();
+      try {
+        final postCaptureQuality = await qualityAnalyzer.analyzeImageFile(imagePath);
+        
+        // Check if image is too blurry
+        if (postCaptureQuality.blurScore < 30) {
+          // Image is too blurry - ask user to retake
+          if (mounted) {
+            final shouldRetake = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: ARColors.warning, size: 32),
+                    const SizedBox(width: 12),
+                    const Expanded(child: Text('Image Quality Warning')),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'The captured image appears blurry.',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Blur Score: ${postCaptureQuality.blurScore.toInt()}/100',
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tips for better photos:',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                          ),
+                          const SizedBox(height: 4),
+                          Text('• Hold your phone steady', style: TextStyle(color: Colors.orange.shade900)),
+                          Text('• Ensure good lighting', style: TextStyle(color: Colors.orange.shade900)),
+                          Text('• Keep camera still for 1-2 seconds', style: TextStyle(color: Colors.orange.shade900)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Keep Anyway'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retake Photo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ARColors.warning,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            );
+            
+            if (shouldRetake == true) {
+              // Delete the blurry image
+              try {
+                await File(imagePath).delete();
+                debugPrint('Deleted blurry image for retake');
+              } catch (e) {
+                debugPrint('Error deleting blurry image: $e');
+              }
+              
+              // Restart image stream for retake
+              try {
+                if (mounted && _controller != null && _controller!.value.isInitialized) {
+                  await _controller!.startImageStream(_processFrame);
+                }
+              } catch (e) {
+                debugPrint('Error restarting stream: $e');
+              }
+              
+              setState(() => _isCapturing = false);
+              return; // Exit without completing task
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Post-capture quality check error: $e');
+        // Continue anyway if analysis fails
+      }
 
       // Complete current task
       _taskManager.completeCurrentTask(
@@ -738,6 +890,25 @@ class _ARCameraScreenState extends State<ARCameraScreen>
     setState(() => _currentZoom = zoom);
   }
 
+  /// Estimate distance based on zoom level (simple heuristic)
+  /// Returns estimated distance in meters
+  double _estimateDistance(double zoom) {
+    // Inverse relationship: lower zoom = farther, higher zoom = closer
+    // This is a rough approximation for validation purposes
+    // Zoom 1.0 (no zoom) ≈ 1.5m away
+    // Zoom 4.0 ≈ 0.5m away
+    // Zoom 8.0 ≈ 0.3m away
+    
+    const double baseDistance = 1.5; // meters at 1x zoom
+    const double minDistance = 0.3;  // meters at max zoom
+    
+    // Logarithmic scale for more realistic distance estimation
+    final double normalizedZoom = (zoom - _minZoom) / (_maxZoom - _minZoom);
+    final double estimatedDistance = baseDistance - (normalizedZoom * (baseDistance - minDistance));
+    
+    return estimatedDistance.clamp(minDistance, baseDistance);
+  }
+
   Future<void> _setFocusPoint(Offset point) async {
     if (_controller == null) return;
 
@@ -759,26 +930,41 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     
-    // Stop image stream first
-    if (_controller != null && _controller!.value.isInitialized) {
+    // Stop validation engine first to prevent processing disposed frames
+    _validationEngine.stop();
+    
+    // Stop image stream with proper async handling
+    if (_controller != null) {
       try {
-        _controller!.stopImageStream().catchError((e) {
-          debugPrint('Error stopping stream in dispose: $e');
-        });
+        if (_controller!.value.isStreamingImages) {
+          _controller!.stopImageStream().catchError((e) {
+            debugPrint('Error stopping stream in dispose: $e');
+          });
+        }
       } catch (e) {
         debugPrint('Error in dispose stream: $e');
       }
+      
+      // Dispose controller
+      _controller?.dispose().catchError((e) {
+        debugPrint('Error disposing controller: $e');
+      });
+      _controller = null;
     }
     
-    _controller?.dispose();
+    // Cleanup other resources
     _validationEngine.dispose();
     _taskManager.dispose();
     _positionSubscription?.cancel();
+    _positionSubscription = null;
+    
+    // Dispose animation controllers
     _pulseAnimationController.dispose();
     _captureAnimationController.dispose();
     _warningAnimationController.dispose();
     _taskTransitionController.dispose();
     _focusAnimationController.dispose();
+    
     super.dispose();
   }
 
@@ -786,36 +972,69 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = _controller;
     
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      // Pause camera operations
+    if (state == AppLifecycleState.inactive) {
+      // Stop validation but keep camera ready
+      _validationEngine.stop();
+    } else if (state == AppLifecycleState.paused) {
+      // Fully pause camera operations
       _validationEngine.stop();
       if (controller != null && controller.value.isInitialized) {
         try {
-          controller.stopImageStream().catchError((e) {
-            debugPrint('Error stopping stream on pause: $e');
-          });
+          if (controller.value.isStreamingImages) {
+            controller.stopImageStream().catchError((e) {
+              debugPrint('Error stopping stream on pause: $e');
+            });
+          }
         } catch (e) {
           debugPrint('Error in pause: $e');
         }
       }
     } else if (state == AppLifecycleState.resumed) {
-      // Resume camera operations
+      // Resume camera operations carefully
       if (controller != null && controller.value.isInitialized) {
-        try {
-          controller.startImageStream(_processFrame).then((_) {
-            _validationEngine.start();
-          }).catchError((e) {
-            debugPrint('Error restarting stream on resume: $e');
-            // Try reinitializing if stream restart fails
-            _initializeCamera();
-          });
-        } catch (e) {
-          debugPrint('Error in resume: $e');
-          _initializeCamera();
-        }
+        // Small delay to ensure camera is ready
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (!mounted || controller != _controller) return;
+          
+          try {
+            // Only start if not already streaming
+            if (!controller.value.isStreamingImages) {
+              controller.startImageStream(_processFrame).then((_) {
+                if (mounted) {
+                  _validationEngine.start();
+                }
+              }).catchError((e) {
+                debugPrint('Error restarting stream on resume: $e');
+                // Reinitialize camera as fallback
+                if (mounted) {
+                  setState(() {
+                    _isLoading = true;
+                  });
+                  _initializeCamera();
+                }
+              });
+            } else {
+              // Stream already running, just restart validation
+              _validationEngine.start();
+            }
+          } catch (e) {
+            debugPrint('Error in resume: $e');
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+              });
+              _initializeCamera();
+            }
+          }
+        });
       } else {
         // Camera not initialized, reinitialize
-        _initializeCamera();
+        if (mounted) {
+          setState(() {
+            _isLoading = true;
+          });
+          _initializeCamera();
+        }
       }
     }
   }
@@ -1037,24 +1256,69 @@ class _ARCameraScreenState extends State<ARCameraScreen>
 
   Widget _buildQualityWarning(String lang) {
     final quality = _currentValidation.imageQuality!;
-    String warning = '';
-    IconData icon = Icons.warning_amber;
+    final List<Map<String, dynamic>> warnings = [];
 
+    // Collect all active warnings
     if (quality.isBlurry) {
-      warning = AppStrings.get('camera', 'warning_blurry', lang);
-      icon = Icons.blur_on;
-    } else if (quality.exposureStatus == ExposureStatus.overexposed) {
-      warning = AppStrings.get('camera', 'warning_overexposed', lang);
-      icon = Icons.wb_sunny;
-    } else if (quality.exposureStatus == ExposureStatus.underexposed) {
-      warning = AppStrings.get('camera', 'warning_underexposed', lang);
-      icon = Icons.brightness_low;
-    } else if (quality.hasBacklight) {
-      warning = AppStrings.get('camera', 'warning_backlight', lang);
-      icon = Icons.flare;
+      warnings.add({
+        'message': 'Hold steady - Image is blurry',
+        'icon': Icons.blur_on,
+        'severity': 'error',
+      });
     }
+    
+    if (quality.exposureStatus == ExposureStatus.overexposed) {
+      warnings.add({
+        'message': 'Too bright - Move to shade',
+        'icon': Icons.wb_sunny,
+        'severity': 'warning',
+      });
+    }
+    
+    if (quality.exposureStatus == ExposureStatus.underexposed) {
+      warnings.add({
+        'message': 'Too dark - Need better lighting',
+        'icon': Icons.brightness_low,
+        'severity': 'error',
+      });
+    }
+    
+    if (quality.hasBacklight) {
+      warnings.add({
+        'message': 'Backlight detected - Turn around',
+        'icon': Icons.flare,
+        'severity': 'warning',
+      });
+    }
+    
+    // Check stability
+    if (!_currentValidation.isStable) {
+      warnings.add({
+        'message': 'Camera shaking - Hold still',
+        'icon': Icons.vibration,
+        'severity': 'error',
+      });
+    }
+    
+    // Check tilt (only for top view)
+    if (_validationEngine.shouldValidateTilt && 
+        _currentValidation.tilt != null && 
+        _currentValidation.tilt!.status == TiltStatus.tilted) {
+      warnings.add({
+        'message': 'Tilt ${_currentValidation.tilt!.message.toLowerCase()}',
+        'icon': Icons.screen_rotation,
+        'severity': 'warning',
+      });
+    }
+    
+    // Distance warnings removed - unreliable without depth sensor
+    // User can judge distance visually from preview
 
-    if (warning.isEmpty) return const SizedBox.shrink();
+    if (warnings.isEmpty) return const SizedBox.shrink();
+    
+    // Show the most critical warning (errors before warnings)
+    final errorWarnings = warnings.where((w) => w['severity'] == 'error').toList();
+    final displayWarning = errorWarnings.isNotEmpty ? errorWarnings.first : warnings.first;
 
     return Positioned(
       top: MediaQuery.of(context).padding.top + 60,
@@ -1065,35 +1329,101 @@ class _ARCameraScreenState extends State<ARCameraScreen>
         builder: (context, child) {
           return Opacity(
             opacity: 0.7 + (0.3 * _warningAnimationController.value),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: quality.overallStatus == QualityStatus.error
-                    ? ARColors.error.withOpacity(0.9)
-                    : ARColors.warning.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(icon, color: Colors.white, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      warning,
-                      style: GoogleFonts.roboto(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+            child: Column(
+              children: [
+                // Primary warning
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: displayWarning['severity'] == 'error'
+                        ? ARColors.error.withOpacity(0.95)
+                        : ARColors.warning.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (displayWarning['severity'] == 'error' ? ARColors.error : ARColors.warning)
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(displayWarning['icon'], color: Colors.white, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          displayWarning['message'],
+                          style: GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (warnings.length > 1)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '+${warnings.length - 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // Show quality score for context
+                if (warnings.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.assessment,
+                            color: _getQualityColor(_validationEngine.getValidationScore()),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Quality: ${_validationEngine.getValidationScore().toInt()}%',
+                            style: GoogleFonts.roboto(
+                              color: _getQualityColor(_validationEngine.getValidationScore()),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
           );
         },
       ),
     );
+  }
+  
+  Color _getQualityColor(double score) {
+    if (score >= 80) return ARColors.valid;
+    if (score >= 50) return ARColors.warning;
+    return ARColors.error;
   }
 
   Widget _buildTopControls(BuildContext context, String lang) {
@@ -1375,9 +1705,11 @@ class _ARCameraScreenState extends State<ARCameraScreen>
   }
 
   Widget _buildBlockerIndicator(String lang) {
-    // Show as warning instead of blocker
+    // Show helpful tip when quality is low but capture is still allowed
     final hasWarnings = _validationEngine.hasQualityWarnings();
-    if (!hasWarnings) return const SizedBox.shrink();
+    final validationScore = _validationEngine.getValidationScore();
+    
+    if (!hasWarnings || validationScore >= 70) return const SizedBox.shrink();
     
     return Positioned(
       bottom: 180,
@@ -1386,21 +1718,23 @@ class _ARCameraScreenState extends State<ARCameraScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: ARColors.warning.withOpacity(0.85),
+          color: Colors.black.withOpacity(0.8),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: ARColors.warning.withOpacity(0.5),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
-            const Icon(Icons.info_outline, color: Colors.white, size: 20),
+            Icon(Icons.tips_and_updates, color: ARColors.warning, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _captureBlockers.isNotEmpty
-                    ? '${_captureBlockers.first} (tap to capture anyway)'
-                    : 'For best results, hold steady',
+                'You can capture, but improving conditions will give better results',
                 style: GoogleFonts.roboto(
                   color: Colors.white,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
             ),

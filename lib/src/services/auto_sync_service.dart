@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:workmanager/workmanager.dart';
 import 'local_storage_service.dart';
 import 'connectivity_service.dart';
+import 'cloud_image_service.dart';
 
 class AutoSyncService {
   static const String syncTaskName = 'crop_image_sync';
@@ -93,14 +95,22 @@ class AutoSyncService {
       
       for (var upload in pendingUploads) {
         try {
+          // Skip if already uploaded (has Cloudinary URL)
+          if (upload.cloudinaryUrl != null && upload.cloudinaryUrl!.isNotEmpty) {
+            print('⏭️  Image already uploaded: ${upload.cloudinaryUrl}');
+            await _localStorageService.updateUploadStatus(upload.id, SyncStatus.synced);
+            successCount++;
+            continue;
+          }
+          
           // Update status to uploading
           await _localStorageService.updateUploadStatus(upload.id, SyncStatus.uploading);
           
-          // Simulate upload to server (replace with actual API call)
-          await _uploadToServer(upload);
+          // Upload to server and get Cloudinary URL
+          final cloudinaryUrl = await _uploadToServer(upload);
           
-          // Update status to synced
-          await _localStorageService.updateUploadStatus(upload.id, SyncStatus.synced);
+          // Update with Cloudinary URL and mark as synced
+          await _localStorageService.updateUploadUrl(upload.id, cloudinaryUrl);
           successCount++;
           
           // Delete local image after successful upload (optional)
@@ -127,25 +137,41 @@ class AutoSyncService {
     }
   }
 
-  // Upload to server (mock implementation)
-  Future<void> _uploadToServer(PendingUpload upload) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // TODO: Replace with actual API call
-    // Example:
-    // final file = File(upload.imagePath);
-    // final request = http.MultipartRequest('POST', Uri.parse('YOUR_API_ENDPOINT'));
-    // request.files.add(await http.MultipartFile.fromPath('image', file.path));
-    // request.fields['cropType'] = upload.cropType;
-    // request.fields['latitude'] = upload.latitude?.toString() ?? '';
-    // request.fields['longitude'] = upload.longitude?.toString() ?? '';
-    // final response = await request.send();
-    // if (response.statusCode != 200) {
-    //   throw Exception('Upload failed');
-    // }
-    
-    print('Uploaded: ${upload.id}');
+  // Upload to server (Cloudinary implementation)
+  Future<String> _uploadToServer(PendingUpload upload) async {
+    try {
+      final file = File(upload.imagePath);
+      
+      if (!await file.exists()) {
+        throw Exception('Image file not found: ${upload.imagePath}');
+      }
+      
+      // Import cloud service
+      final cloudService = CloudImageService();
+      
+      // Upload to Cloudinary
+      final result = await cloudService.uploadImage(
+        file,
+        farmerId: 'farmer_${upload.id.split('_').first}',
+        imageType: upload.cropType,
+        metadata: {
+          'description': upload.description ?? '',
+          'latitude': upload.latitude?.toString() ?? '',
+          'longitude': upload.longitude?.toString() ?? '',
+          'capturedAt': upload.capturedAt.toIso8601String(),
+          'uploadId': upload.id,
+        },
+      );
+      
+      print('✅ Uploaded to Cloudinary: ${result.url}');
+      
+      // Return the Cloudinary URL for storage
+      return result.url;
+      
+    } catch (e) {
+      print('❌ Upload failed: $e');
+      rethrow;
+    }
   }
 
   // Show sync notification

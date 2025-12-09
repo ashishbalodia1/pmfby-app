@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:path/path.dart' as path;
@@ -7,23 +8,74 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 /// Service for uploading images to cloud storage (Cloudinary)
 class CloudImageService {
-  // TODO: Replace with your Cloudinary credentials
-  // Get free account at: https://cloudinary.com
+  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+  static bool _notificationsInitialized = false;
+
+  /// Initialize notifications
+  static Future<void> _initNotifications() async {
+    if (_notificationsInitialized) return;
+
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _notificationsPlugin.initialize(initSettings);
+    _notificationsInitialized = true;
+  }
+
+  /// Show upload notification
+  static Future<void> _showNotification({
+    required int id,
+    required String title,
+    required String body,
+    bool isSuccess = true,
+  }) async {
+    await _initNotifications();
+
+    final androidDetails = AndroidNotificationDetails(
+      'cloudinary_uploads',
+      'Image Uploads',
+      channelDescription: 'Notifications for image upload status',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const iosDetails = DarwinNotificationDetails();
+
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notificationsPlugin.show(
+      id,
+      title,
+      body,
+      notificationDetails,
+    );
+  }
+
+  // Cloudinary credentials - Environment variables with fallback to configured values
   static const String cloudName = String.fromEnvironment(
     'CLOUDINARY_CLOUD_NAME',
-    defaultValue: 'your-cloud-name',
+    defaultValue: 'dxahqsgwv',
   );
   static const String apiKey = String.fromEnvironment(
     'CLOUDINARY_API_KEY',
-    defaultValue: 'your-api-key',
+    defaultValue: '916295378241238',
   );
   static const String apiSecret = String.fromEnvironment(
     'CLOUDINARY_API_SECRET',
-    defaultValue: 'your-api-secret',
+    defaultValue: 'X2GoZB5cN3lnPSE4HEuOAby1m80',
   );
   static const String uploadPreset = String.fromEnvironment(
     'CLOUDINARY_UPLOAD_PRESET',
-    defaultValue: 'pmfby_preset',
+    defaultValue: 'pmfby-app',
   );
 
   static const String baseUrl = 'https://api.cloudinary.com/v1_1';
@@ -75,7 +127,16 @@ class CloudImageService {
 
       if (response.statusCode == 200) {
         final jsonData = json.decode(responseData);
-        debugPrint('Upload successful: ${jsonData['secure_url']}');
+        final imageUrl = jsonData['secure_url'];
+        debugPrint('Upload successful: $imageUrl');
+        
+        // Show success notification
+        await _showNotification(
+          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          title: '✅ Image Uploaded',
+          body: 'Photo uploaded successfully to cloud storage',
+          isSuccess: true,
+        );
         
         return CloudinaryUploadResult(
           publicId: jsonData['public_id'],
@@ -92,6 +153,15 @@ class CloudImageService {
       }
     } catch (e) {
       debugPrint('Error uploading image: $e');
+      
+      // Show error notification
+      await _showNotification(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: '❌ Upload Failed',
+        body: 'Failed to upload photo. Will retry when online.',
+        isSuccess: false,
+      );
+      
       rethrow;
     }
   }
