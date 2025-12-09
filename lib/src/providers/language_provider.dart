@@ -23,6 +23,11 @@ class LanguageProvider with ChangeNotifier {
   Future<void> setLanguage(String languageCode) async {
     if (_currentLanguage == languageCode) return;
     
+    // Ensure initialized before using _prefs
+    if (!_isInitialized) {
+      await initialize();
+    }
+    
     _currentLanguage = languageCode;
     await _prefs.setString('app_language', languageCode);
     notifyListeners();
@@ -33,22 +38,8 @@ class LanguageProvider with ChangeNotifier {
     const Map<String, String> languageNames = {
       'en': 'English',
       'hi': 'Hindi',
-      'pa': 'Punjabi',
-      'mr': 'Marathi',
-      'gu': 'Gujarati',
-      'ta': 'Tamil',
-      'te': 'Telugu',
-      'kn': 'Kannada',
-      'ml': 'Malayalam',
-      'bn': 'Bengali',
-      'or': 'Odia',
-      'as': 'Assamese',
-      'ur': 'Urdu',
-      'sa': 'Sanskrit',
-      'raj': 'Rajasthani',
-      'bho': 'Bhojpuri',
     };
-    return languageNames[code] ?? 'Unknown';
+    return languageNames[code] ?? 'English';
   }
 
   // Get language name in native script
@@ -56,21 +47,7 @@ class LanguageProvider with ChangeNotifier {
     const Map<String, String> nativeNames = {
       'en': 'English',
       'hi': 'हिन्दी',
-      'pa': 'ਪੰਜਾਬੀ',
-      'mr': 'मराठी',
-      'gu': 'ગુજરાતી',
-      'ta': 'தமிழ்',
-      'te': 'తెలుగు',
-      'kn': 'ಕನ್ನಡ',
-      'ml': 'മലയാളം',
-      'bn': 'বাংলা',
-      'or': 'ଓଡ଼ିଆ',
-      'as': 'অসমীয়া',
-      'ur': 'اردو',
-      'sa': 'संस्कृतम्',
-      'raj': 'राजस्थानी',
-      'bho': 'भोजपुरी',
     };
-    return nativeNames[code] ?? 'Unknown';
+    return nativeNames[code] ?? 'English';
   }
 }

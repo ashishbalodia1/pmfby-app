@@ -199,8 +199,14 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
     return Consumer<LanguageProvider>(
       builder: (context, languageProvider, child) {
         final lang = languageProvider.currentLanguage;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final bgColor = isDark 
+            ? Theme.of(context).colorScheme.background.withOpacity(0.95)
+            : Colors.green.shade50.withOpacity(0.3);
+
         return Scaffold(
-          backgroundColor: Colors.grey.shade50,
+          backgroundColor: bgColor,
+          extendBodyBehindAppBar: true,
           appBar: AppBar(
             title: Text(
               AppStrings.get('claims', 'my_claims', lang),
@@ -209,6 +215,16 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
             backgroundColor: Colors.green.shade700,
             foregroundColor: Colors.white,
             elevation: 0,
+            flexibleSpace: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF1B5E20),
+                    const Color(0xFF2E7D32),
+                  ],
+                ),
+              ),
+            ),
             bottom: TabBar(
               controller: _tabController,
               indicatorColor: Colors.white,
@@ -469,7 +485,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.warning_amber, size: 16, color: Colors.orange.shade700),
+                    Icon(Icons.warning_amber, size: 16, color: Colors.green.shade700),
                     const SizedBox(width: 6),
                     Text(
                       '${lang == 'hi' ? 'कारण' : 'Reason'}: ${claim.damageReason}',
@@ -484,7 +500,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 16, color: Colors.blue.shade700),
+                    Icon(Icons.calendar_today, size: 16, color: Colors.green.shade700),
                     const SizedBox(width: 6),
                     Text(
                       '${lang == 'hi' ? 'तिथि' : 'Date'}: ${DateFormat('dd MMM yyyy').format(claim.incidentDate)}',
@@ -499,7 +515,7 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.percent, size: 16, color: Colors.red.shade700),
+                    Icon(Icons.percent, size: 16, color: Colors.green.shade700),
                     const SizedBox(width: 6),
                     Text(
                       '${lang == 'hi' ? 'नुकसान' : 'Loss'}: ${_formatPercentage(claim.estimatedLossPercentage)}%',
@@ -525,20 +541,20 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                      color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
+                      border: Border.all(color: Colors.orange.shade200),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.red.shade700),
+                        Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             claim.reviewerComments!,
                             style: hindiTextStyle(
                               fontSize: 12,
-                              color: Colors.red.shade900,
+                              color: Colors.orange.shade900,
                               letterSpacing: 0.2,
                             ),
                           ),
@@ -579,15 +595,15 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
       case ClaimStatus.draft:
         return Colors.grey;
       case ClaimStatus.submitted:
-        return Colors.blue;
+        return Colors.green.shade600;
       case ClaimStatus.underReview:
-        return Colors.orange;
+        return Colors.green.shade400;
       case ClaimStatus.approved:
-        return Colors.green;
+        return Colors.green.shade700;
       case ClaimStatus.rejected:
-        return Colors.red;
+        return Colors.orange.shade700;
       case ClaimStatus.paid:
-        return Colors.teal;
+        return Colors.green.shade800;
     }
   }
 
@@ -766,12 +782,12 @@ class _ClaimsListScreenState extends State<ClaimsListScreen> with SingleTickerPr
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: claim.status == ClaimStatus.rejected
-                        ? Colors.red.shade50
+                        ? Colors.orange.shade50
                         : Colors.green.shade50,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: claim.status == ClaimStatus.rejected
-                          ? Colors.red.shade200
+                          ? Colors.orange.shade200
                           : Colors.green.shade200,
                     ),
                   ),

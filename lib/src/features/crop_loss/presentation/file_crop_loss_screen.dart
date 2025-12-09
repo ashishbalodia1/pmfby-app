@@ -289,31 +289,88 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
 
                           const SizedBox(height: 32),
 
-                          // Submit Button
-                          ElevatedButton(
-                            onPressed: () => _submitReport(lang),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade700,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                          // Submit Button - Premium Design
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                colors: [Colors.red.shade600, Colors.red.shade800],
                               ),
-                              elevation: 4,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.send),
-                                const SizedBox(width: 12),
-                                Text(
-                                  AppStrings.get('cropLoss', 'submit_report', lang),
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.shade400.withOpacity(0.5),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
                                 ),
                               ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _submitReport(lang),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        AppStrings.get('cropLoss', 'submit_report', lang),
+                                        style: GoogleFonts.notoSansDevanagari(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '⚡ Submit within 72 hours for faster processing',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.notoSansDevanagari(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Old button backup (hidden)
+                          Visibility(
+                            visible: false,
+                            child: ElevatedButton(
+                              onPressed: () => _submitReport(lang),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 4,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.send),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    AppStrings.get('cropLoss', 'submit_report', lang),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
 
@@ -678,20 +735,50 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
   }
 
   void _submitReport(String lang) {
-    if (_formKey.currentState!.validate()) {
-      if (_incidentDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select incident date')),
-        );
-        return;
-      }
+    // Validate form first
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Please fill all required fields',
+            style: GoogleFonts.notoSansDevanagari(),
+          ),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+      return;
+    }
 
-      if (_currentPosition == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GPS location not available. Please refresh.')),
-        );
-        return;
-      }
+    if (_incidentDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Please select incident date',
+            style: GoogleFonts.notoSansDevanagari(),
+          ),
+          backgroundColor: Colors.orange.shade600,
+        ),
+      );
+      return;
+    }
+
+    if (_currentPosition == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Getting GPS location... Please wait',
+            style: GoogleFonts.notoSansDevanagari(),
+          ),
+          backgroundColor: Colors.blue.shade600,
+          action: SnackBarAction(
+            label: 'Refresh',
+            textColor: Colors.white,
+            onPressed: _getCurrentLocation,
+          ),
+        ),
+      );
+      return;
+    }
 
       // Show success dialog
       showDialog(
@@ -755,7 +842,6 @@ class _FileCropLossScreenState extends State<FileCropLossScreen> {
           ],
         ),
       );
-    }
   }
 
   void _showHelpDialog(String lang) {

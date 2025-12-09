@@ -65,9 +65,15 @@ Widget build(BuildContext context) {
     builder: (context, languageProvider, child) {
       final lang = languageProvider.currentLanguage;
 
-      return Scaffold(
-        backgroundColor: Colors.grey.shade50,
-        appBar: AppBar(
+      return WillPopScope(
+        onWillPop: () async {
+          // Navigate back to dashboard instead of exiting app
+          Navigator.of(context).pop();
+          return false;
+        },
+        child: Scaffold(
+          backgroundColor: Colors.grey.shade50,
+          appBar: AppBar(
           title: Text(
             AppStrings.get('schemes', 'insurance_schemes', lang),
             style: GoogleFonts.poppins(
@@ -98,6 +104,7 @@ Widget build(BuildContext context) {
             _buildSchemesTab(lang),
             _buildEligibilityTab(lang),
           ],
+        ),
         ),
       );
     },
@@ -589,6 +596,41 @@ Widget build(BuildContext context) {
             'वेबसाइट',
             'www.pmfby.gov.in',
             () => _launchUrl('https://pmfby.gov.in'),
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text(
+            'अन्य महत्वपूर्ण लिंक',
+            style: GoogleFonts.notoSansDevanagari(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildContactItem(
+            Icons.home_work,
+            'कृषि मंत्रालय',
+            'agricoop.gov.in',
+            () => _launchUrl('https://agricoop.gov.in'),
+          ),
+          _buildContactItem(
+            Icons.app_registration,
+            'PMFBY रजिस्ट्रेशन',
+            'pmfby.gov.in/farmerRegistration',
+            () => _launchUrl('https://pmfby.gov.in/farmerRegistration'),
+          ),
+          _buildContactItem(
+            Icons.track_changes,
+            'क्लेम ट्रैकिंग',
+            'pmfby.gov.in/claimStatus',
+            () => _launchUrl('https://pmfby.gov.in/claimStatus'),
+          ),
+          _buildContactItem(
+            Icons.question_answer,
+            'FAQ',
+            'pmfby.gov.in/faq',
+            () => _launchUrl('https://pmfby.gov.in/faq'),
           ),
         ],
       ),
@@ -1261,11 +1303,25 @@ Widget build(BuildContext context) {
   }
 
   Future<void> _launchUrl(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri)) {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $url')),
+          SnackBar(
+            content: Text('लिंक नहीं खुल सका: $url'),
+            backgroundColor: Colors.red.shade600,
+            action: SnackBarAction(
+              label: 'ठीक है',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
         );
       }
     }

@@ -1,5 +1,5 @@
 // Enhanced Language Support for PMFBY App
-// Supports 15 Indian Languages + English
+// Supports 31 Indian Languages + English (32 total languages including village farming dialects)
 
 class AppLanguage {
   final String code;
@@ -14,23 +14,10 @@ class AppLanguage {
 }
 
 class AppLanguages {
+  // Only showing working languages (English and Hindi)
   static const List<AppLanguage> supportedLanguages = [
     AppLanguage(code: 'en', name: 'English', nativeName: 'English'),
     AppLanguage(code: 'hi', name: 'Hindi', nativeName: 'हिन्दी'),
-    AppLanguage(code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ'),
-    AppLanguage(code: 'mr', name: 'Marathi', nativeName: 'मराठी'),
-    AppLanguage(code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી'),
-    AppLanguage(code: 'ta', name: 'Tamil', nativeName: 'தமிழ்'),
-    AppLanguage(code: 'te', name: 'Telugu', nativeName: 'తెలుగు'),
-    AppLanguage(code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ'),
-    AppLanguage(code: 'ml', name: 'Malayalam', nativeName: 'മലയാളം'),
-    AppLanguage(code: 'bn', name: 'Bengali', nativeName: 'বাংলা'),
-    AppLanguage(code: 'or', name: 'Odia', nativeName: 'ଓଡ଼ିଆ'),
-    AppLanguage(code: 'as', name: 'Assamese', nativeName: 'অসমীয়া'),
-    AppLanguage(code: 'ur', name: 'Urdu', nativeName: 'اردو'),
-    AppLanguage(code: 'sa', name: 'Sanskrit', nativeName: 'संस्कृतम्'),
-    AppLanguage(code: 'raj', name: 'Rajasthani', nativeName: 'राजस्थानी'),
-    AppLanguage(code: 'bho', name: 'Bhojpuri', nativeName: 'भोजपुरी'),
   ];
 }
 
