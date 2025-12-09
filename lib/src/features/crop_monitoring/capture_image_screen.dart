@@ -8,6 +8,10 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import '../../services/local_storage_service.dart';
 import '../../services/connectivity_service.dart';
+import '../../services/cloud_image_service.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../repositories/crop_image_repository.dart';
+import '../../models/mongodb/crop_image_model.dart';
 import '../../providers/language_provider.dart';
 import '../../localization/app_localizations.dart';
 
@@ -20,6 +24,9 @@ class CaptureImageScreen extends StatefulWidget {
 
 class _CaptureImageScreenState extends State<CaptureImageScreen> {
   final ImagePicker _picker = ImagePicker();
+  final CloudImageService _cloudImageService = CloudImageService();
+  final CropImageRepository _cropImageRepository = CropImageRepository();
+  
   XFile? _image;
   List<XFile> _multipleImages = [];
   Position? _position;
@@ -218,6 +225,7 @@ class _CaptureImageScreenState extends State<CaptureImageScreen> {
     try {
       final localStorageService = LocalStorageService();
       final connectivityService = context.read<ConnectivityService>();
+      final authService = context.read<FirebaseAuthService>();
       
       // Show crop type selection dialog
       final cropType = await _showCropTypeDialog();
@@ -226,8 +234,10 @@ class _CaptureImageScreenState extends State<CaptureImageScreen> {
         return;
       }
 
-      // Save image locally
+      final farmerId = authService.currentUser?.uid ?? 'unknown_farmer';
       final uploadId = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      // Save image locally first (for offline support)
       final savedImagePath = await localStorageService.saveImageLocally(File(_image!.path), uploadId);
       
       // Create pending upload (with or without location)
@@ -244,16 +254,78 @@ class _CaptureImageScreenState extends State<CaptureImageScreen> {
 
       await localStorageService.savePendingUpload(upload);
 
-      if (mounted) {
-        if (connectivityService.isOnline) {
-          _showSuccess(_t('saved_syncing'));
-        } else {
+      // If online, also upload to Cloudinary and save to MongoDB
+      if (connectivityService.isOnline) {
+        try {
+          // Upload to Cloudinary
+          final uploadResult = await _cloudImageService.uploadImage(
+            File(_image!.path),
+            farmerId: farmerId,
+            imageType: 'crop_health',
+            metadata: {
+              'crop_type': cropType,
+              'location': _locationName ?? 'Unknown',
+              'latitude': _position?.latitude ?? 0.0,
+              'longitude': _position?.longitude ?? 0.0,
+            },
+          );
+
+          // Update local storage with Cloudinary URL
+          await localStorageService.updateUploadUrl(uploadId, uploadResult.url);
+
+          // Create CropImageModel and save to MongoDB
+          final now = DateTime.now();
+          final cropImage = CropImageModel(
+            imageId: uploadId,
+            farmerId: farmerId,
+            parcelId: 'PARCEL_${farmerId}_${now.year}', // Link to actual parcel if available
+            metadata: ImageMetadata(
+              width: uploadResult.width,
+              height: uploadResult.height,
+              format: uploadResult.format,
+              sizeBytes: uploadResult.bytes,
+            ),
+            location: GeoLocation(
+              latitude: _position?.latitude ?? 0.0,
+              longitude: _position?.longitude ?? 0.0,
+              accuracy: _position?.accuracy,
+              timestamp: _position != null ? DateTime.now() : now,
+            ),
+            imageUrl: uploadResult.url,
+            thumbnailUrl: uploadResult.thumbnailUrl ?? uploadResult.url,
+            imageType: ImageType.cropHealth,
+            cropInfo: CropInfo(
+              cropName: cropType,
+              cropType: _getCropSeason(),
+            ),
+            season: _getCropSeason(),
+            year: now.year,
+            status: ImageStatus.uploaded,
+            capturedAt: upload.capturedAt,
+            uploadedAt: now,
+          );
+
+          // Save to MongoDB
+          await _cropImageRepository.createCropImage(cropImage);
+
+          if (mounted) {
+            _showSuccess('${_t('saved_syncing')} ✅ Saved to database');
+          }
+        } catch (e) {
+          debugPrint('Cloud upload/MongoDB save error: $e');
+          if (mounted) {
+            _showSuccess('${_t('saved_offline')} (Will sync later)');
+          }
+        }
+      } else {
+        if (mounted) {
           _showSuccess(_t('saved_offline'));
         }
+      }
+
+      if (mounted) {
         await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          context.pop();
-        }
+        context.pop();
       }
     } catch (e) {
       if (mounted) {
@@ -263,6 +335,15 @@ class _CaptureImageScreenState extends State<CaptureImageScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  String _getCropSeason() {
+    final month = DateTime.now().month;
+    if (month >= 4 && month <= 9) {
+      return 'Kharif ${DateTime.now().year}';
+    } else {
+      return 'Rabi ${DateTime.now().year}';
     }
   }
 

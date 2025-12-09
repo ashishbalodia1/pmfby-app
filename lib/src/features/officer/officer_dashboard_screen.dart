@@ -13,6 +13,8 @@ import '../../localization/app_localizations.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../services/weather_service.dart';
+import '../../repositories/claim_repository.dart';
+import '../../models/mongodb/claim_model.dart';
 
 enum OfficerLevel {
   national,
@@ -42,55 +44,30 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
   Map<String, dynamic>? _weatherData;
   bool _isLoadingWeather = true;
   final WeatherService _weatherService = WeatherService();
+  
+  // MongoDB integration
+  final ClaimRepository _claimRepository = ClaimRepository();
+  List<ClaimModel> _recentClaims = [];
+  bool _isLoadingClaims = true;
 
   // From other branch → keep filter option
   String _selectedClaimFilter = 'all'; // all, pending, approved, rejected
 
-  // Demo statistics data
-  final Map<String, dynamic> _stats = {
-    'total_claims': 1247,
-    'pending_claims': 342,
-    'approved_claims': 785,
-    'rejected_claims': 120,
-    'total_farmers': 5680,
-    'active_policies': 4532,
-    'total_premium': 125400000,
-    'total_payout': 89500000,
-    'crop_loss_reports': 456,
-    'pending_assessments': 89,
-    'avg_claim_time': 12.5, // days
-    'approval_rate': 86.5, // percentage
+  // Statistics data - will be fetched from MongoDB
+  Map<String, dynamic> _stats = {
+    'total_claims': 0,
+    'pending_claims': 0,
+    'approved_claims': 0,
+    'rejected_claims': 0,
+    'total_farmers': 0,
+    'active_policies': 0,
+    'total_premium': 0,
+    'total_payout': 0,
+    'crop_loss_reports': 0,
+    'pending_assessments': 0,
+    'avg_claim_time': 0.0,
+    'approval_rate': 0.0,
   };
-
-  final List<Map<String, dynamic>> _recentClaims = [
-    {
-      'id': 'CLM2024001',
-      'farmer': 'Ram Singh',
-      'crop': 'Wheat',
-      'amount': 45000,
-      'status': 'pending',
-      'date': DateTime(2024, 11, 20),
-      'district': 'Ludhiana',
-    },
-    {
-      'id': 'CLM2024002',
-      'farmer': 'Sita Devi',
-      'crop': 'Rice',
-      'amount': 68000,
-      'status': 'approved',
-      'date': DateTime(2024, 11, 19),
-      'district': 'Ludhiana',
-    },
-    {
-      'id': 'CLM2024003',
-      'farmer': 'Mohan Kumar',
-      'crop': 'Cotton',
-      'amount': 32000,
-      'status': 'under_review',
-      'date': DateTime(2024, 11, 18),
-      'district': 'Patiala',
-    },
-  ];
 
   Future<bool> _showExitConfirmationDialog() async {
     final lang = context.read<LanguageProvider>().currentLanguage;
@@ -126,6 +103,49 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     super.initState();
     _getCurrentLocation();
     _fetchWeatherData();
+    _loadClaimsData();
+  }
+
+  Future<void> _loadClaimsData() async {
+    setState(() => _isLoadingClaims = true);
+    
+    try {
+      // Fetch claims based on filter
+      List<ClaimModel> claims;
+      if (_selectedClaimFilter == 'all') {
+        claims = await _claimRepository.getAllClaims(limit: 50);
+      } else {
+        final status = _selectedClaimFilter.toUpperCase();
+        claims = await _claimRepository.getClaimsByStatus(status);
+      }
+      
+      // Fetch statistics
+      final stats = await _claimRepository.getClaimStats();
+      
+      if (mounted) {
+        setState(() {
+          _recentClaims = claims;
+          _stats['total_claims'] = stats['total'] ?? 0;
+          _stats['pending_claims'] = stats['pending'] ?? 0;
+          _stats['approved_claims'] = stats['approved'] ?? 0;
+          _stats['rejected_claims'] = stats['rejected'] ?? 0;
+          _stats['pending_assessments'] = stats['review'] ?? 0;
+          
+          // Calculate approval rate
+          final total = stats['total'] ?? 0;
+          if (total > 0) {
+            _stats['approval_rate'] = ((stats['approved'] ?? 0) / total * 100).toDouble();
+          }
+          
+          _isLoadingClaims = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading claims: $e');
+      if (mounted) {
+        setState(() => _isLoadingClaims = false);
+      }
+    }
   }
   
   Future<void> _fetchWeatherData() async {
@@ -717,13 +737,13 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                 final filteredClaims = _selectedClaimFilter == 'all'
                     ? _recentClaims
                     : _recentClaims.where((claim) {
-                        final status = claim['status'] as String;
+                        final status = claim.status.toUpperCase();
                         if (_selectedClaimFilter == 'pending') {
-                          return status == 'pending' || status == 'under_review';
+                          return status == 'PENDING' || status == 'REVIEW';
                         } else if (_selectedClaimFilter == 'approved') {
-                          return status == 'approved';
+                          return status == 'APPROVED';
                         } else if (_selectedClaimFilter == 'rejected') {
-                          return status == 'rejected';
+                          return status == 'REJECTED';
                         }
                         return true;
                       }).toList();
@@ -1252,8 +1272,11 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     );
   }
 
-  Widget _buildClaimCard(Map<String, dynamic> claim, String lang) {
-    Color statusColor = _getStatusColor(claim['status']);
+  Widget _buildClaimCard(ClaimModel claim, String lang) {
+    Color statusColor = _getStatusColor(claim.status.toLowerCase());
+    
+    // Calculate estimated amount from AI assessment
+    final estimatedAmount = (claim.aiAssessment.lossPct * 1000).toInt(); // Simplified calculation
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1268,14 +1291,14 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
           child: Icon(Icons.assignment, color: statusColor),
         ),
         title: Text(
-          claim['farmer'],
+          claim.farmerId.substring(0, 8), // Show shortened farmer ID
           style: GoogleFonts.poppins(
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
         subtitle: Text(
-          '${claim['crop']} • ₹${claim['amount']}',
+          '${claim.aiAssessment.cropType} • ₹$estimatedAmount • ${claim.aiAssessment.lossPct.toStringAsFixed(1)}% loss',
           style: GoogleFonts.roboto(fontSize: 12),
         ),
         trailing: Container(
@@ -1286,7 +1309,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
             border: Border.all(color: statusColor),
           ),
           child: Text(
-            _getStatusLabel(claim['status'], lang),
+            _getStatusLabel(claim.status.toLowerCase(), lang),
             style: GoogleFonts.roboto(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -1294,13 +1317,14 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
             ),
           ),
         ),
-        onTap: () => _showClaimDetails(claim),
+        onTap: () => _showClaimDetailsModel(claim),
       ),
     );
   }
 
-  Widget _buildDetailedClaimCard(Map<String, dynamic> claim, String lang) {
-    Color statusColor = _getStatusColor(claim['status']);
+  Widget _buildDetailedClaimCard(ClaimModel claim, String lang) {
+    Color statusColor = _getStatusColor(claim.status.toLowerCase());
+    final estimatedAmount = (claim.aiAssessment.lossPct * 1000).toInt();
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1313,7 +1337,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  claim['id'],
+                  claim.claimId,
                   style: GoogleFonts.robotoMono(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1328,7 +1352,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                     border: Border.all(color: statusColor),
                   ),
                   child: Text(
-                    _getStatusLabel(claim['status'], lang),
+                    _getStatusLabel(claim.status.toLowerCase(), lang),
                     style: GoogleFonts.roboto(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1344,7 +1368,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                 Icon(Icons.person, size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
-                  claim['farmer'],
+                  claim.farmerId.substring(0, 12),
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -1357,23 +1381,23 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               children: [
                 Icon(Icons.agriculture, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
-                Text('${AppStrings.get('officer', 'crop', lang)} ${claim['crop']}', style: GoogleFonts.roboto(fontSize: 13)),
+                Text('${AppStrings.get('officer', 'crop', lang)} ${claim.aiAssessment.cropType}', style: GoogleFonts.roboto(fontSize: 13)),
                 const SizedBox(width: 16),
                 Icon(Icons.currency_rupee, size: 14, color: Colors.grey.shade600),
-                Text('₹${claim['amount']}', style: GoogleFonts.roboto(fontSize: 13)),
+                Text('₹$estimatedAmount', style: GoogleFonts.roboto(fontSize: 13)),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.location_on, size: 14, color: Colors.grey.shade600),
+                Icon(Icons.warning, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
-                Text('${claim['district']}', style: GoogleFonts.roboto(fontSize: 13)),
+                Text('Loss: ${claim.aiAssessment.lossPct.toStringAsFixed(1)}%', style: GoogleFonts.roboto(fontSize: 13)),
                 const SizedBox(width: 16),
                 Icon(Icons.calendar_today, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
-                  DateFormat('dd MMM yyyy').format(claim['date']),
+                  DateFormat('dd MMM yyyy').format(claim.createdAt),
                   style: GoogleFonts.roboto(fontSize: 13),
                 ),
               ],
@@ -1383,7 +1407,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _showClaimDetails(claim),
+                    onPressed: () => _showClaimDetailsModel(claim),
                     icon: const Icon(Icons.visibility, size: 16),
                     label: Text(AppStrings.get('officer', 'view_details', lang)),
                     style: OutlinedButton.styleFrom(
@@ -1394,7 +1418,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: () => _showClaimDetailsModel(claim),
                     icon: const Icon(Icons.rate_review, size: 16),
                     label: Text(AppStrings.get('officer', 'review', lang)),
                     style: ElevatedButton.styleFrom(
@@ -1438,6 +1462,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
             setState(() {
               _selectedClaimFilter = filterValue;
             });
+            _loadClaimsData(); // Refresh data when filter changes
           },
         ),
       ),
@@ -1713,7 +1738,7 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
     );
   }
 
-  void _showClaimDetails(Map<String, dynamic> claim) {
+  void _showClaimDetailsModel(ClaimModel claim) {
     final lang = context.read<LanguageProvider>().currentLanguage;
     showModalBottomSheet(
       context: context,
@@ -1751,28 +1776,135 @@ class _OfficerDashboardScreenState extends State<OfficerDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('${lang == 'hi' ? 'दावा आईडी' : 'Claim ID'}: ${claim['id']}', style: GoogleFonts.roboto()),
-              Text('${lang == 'hi' ? 'किसान' : 'Farmer'}: ${claim['farmer']}', style: GoogleFonts.roboto()),
-              Text('${lang == 'hi' ? 'फसल' : 'Crop'}: ${claim['crop']}', style: GoogleFonts.roboto()),
-              Text('${lang == 'hi' ? 'राशि' : 'Amount'}: ₹${claim['amount']}', style: GoogleFonts.roboto()),
-              Text('${lang == 'hi' ? 'जिला' : 'District'}: ${claim['district']}', style: GoogleFonts.roboto()),
-              Text(
-                '${lang == 'hi' ? 'तारीख' : 'Date'}: ${DateFormat('dd MMM yyyy').format(claim['date'])}',
-                style: GoogleFonts.roboto(),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
-                  backgroundColor: Colors.indigo.shade700,
+              _buildDetailRow(lang == 'hi' ? 'दावा आईडी' : 'Claim ID', claim.claimId),
+              _buildDetailRow(lang == 'hi' ? 'किसान आईडी' : 'Farmer ID', claim.farmerId),
+              _buildDetailRow(lang == 'hi' ? 'फसल' : 'Crop', claim.aiAssessment.cropType),
+              _buildDetailRow(lang == 'hi' ? 'नुकसान %' : 'Loss %', '${claim.aiAssessment.lossPct.toStringAsFixed(1)}%'),
+              _buildDetailRow(lang == 'hi' ? 'गंभीरता' : 'Severity', claim.aiAssessment.severity),
+              _buildDetailRow(lang == 'hi' ? 'स्थिति' : 'Status', claim.status),
+              _buildDetailRow(lang == 'hi' ? 'सीजन' : 'Season', claim.season),
+              _buildDetailRow(lang == 'hi' ? 'तारीख' : 'Date', DateFormat('dd MMM yyyy').format(claim.createdAt)),
+              
+              if (claim.submission.images.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  lang == 'hi' ? 'सबूत की फोटो' : 'Evidence Photos',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
-                child: Text(AppStrings.get('premium', 'close', lang)),
+                const SizedBox(height: 8),
+                Text('${claim.submission.images.length} image(s) uploaded', 
+                  style: GoogleFonts.roboto(fontSize: 12, color: Colors.grey.shade600)),
+              ],
+              
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _approveClaimAction(claim);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                      ),
+                      child: Text(lang == 'hi' ? 'स्वीकृत करें' : 'Approve'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _rejectClaimAction(claim);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                      ),
+                      child: Text(lang == 'hi' ? 'अस्वीकार करें' : 'Reject'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: GoogleFonts.roboto(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.roboto(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approveClaimAction(ClaimModel claim) async {
+    try {
+      await _claimRepository.updateClaimStatus(
+        claimId: claim.claimId,
+        status: 'APPROVED',
+        reviewerId: 'OFFICER_${DateTime.now().millisecondsSinceEpoch}',
+        notes: 'Approved by district officer',
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Claim ${claim.claimId} approved ✅'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      _loadClaimsData(); // Refresh data
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _rejectClaimAction(ClaimModel claim) async {
+    try {
+      await _claimRepository.updateClaimStatus(
+        claimId: claim.claimId,
+        status: 'REJECTED',
+        reviewerId: 'OFFICER_${DateTime.now().millisecondsSinceEpoch}',
+        notes: 'Rejected by district officer',
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Claim ${claim.claimId} rejected ❌'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      
+      _loadClaimsData(); // Refresh data
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 }
